@@ -1,0 +1,22 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "WD",
+  "outputfilename": "WD",
+  "frontend": {
+    "dir": "./frontend/src",
+    "install": "",
+    "build": "",
+    "dev": ""
+  },
+  "author": {
+    "name": "LiQiu",
+    "email": "liqiu@example.com"
+  },
+  "info": {
+    "companyName": "WD Security",
+    "productName": "WD",
+    "productVersion": "0.7",
+    "copyright": "Copyright © 2026 LiQiu",
+    "comments": "WD安全工具箱 - 云原生安全检测工具"
+  }
+}
