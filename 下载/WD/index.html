@@ -1,0 +1,4769 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>W-DD 看守者-防线部署</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #111118;
+  --bg-tertiary: #1a1a24;
+  --bg-card: #16161f;
+  --bg-hover: #22222e;
+  --text-primary: #f0f0f5;
+  --text-secondary: #a0a0b0;
+  --text-muted: #606070;
+  --accent: #ff0040;
+  --accent-hover: #ff3366;
+  --accent-glow: rgba(255,0,64,0.5);
+  --accent-glow-soft: rgba(255,0,64,0.3);
+  --border: #2a2a35;
+  --success: #00ff88;
+  --warning: #ffaa00;
+  --danger: #ff0040;
+  --info: #4488ff;
+  --stopped: #555555;
+  --neon-cyan: #00e5ff;
+  --neon-green: #00ff88;
+  --neon-orange: #ffaa00;
+  --neon-purple: #aa66ff;
+  --neon-pink: #ff66aa;
+  --neon-yellow: #ffdd00;
+  --neon-blue: #4488ff;
+  --neon-red: #ff4444;
+
+  --ring-target-offset: 0;}
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+body {
+  font-family: 'Rajdhani', 'Consolas', 'Courier New', monospace;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+  font-size: 15px;
+}
+
+/* ===== 标题栏 ===== */
+.title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #1a1a24 0%, #0f0f15 100%);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.title-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.title-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 5px var(--accent-glow); }
+  50% { box-shadow: 0 0 20px var(--accent-glow), 0 0 40px rgba(255,42,42,0.1); }
+}
+.title-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 2px;
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+}
+.title-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  -webkit-app-region: no-drag;
+}
+.version {
+  font-size: 13px;
+  color: var(--accent);
+  background: rgba(255,42,42,0.1);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,42,42,0.2);
+}
+.close-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 18px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.close-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  transform: rotate(90deg);
+}
+
+/* ===== 主布局 ===== */
+.main-container {
+  display: flex;
+  height: calc(100vh - 57px);
+}
+
+/* ===== 侧边栏 ===== */
+.sidebar {
+  width: 200px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 15px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+.nav-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.nav-item.active {
+  background: linear-gradient(135deg, rgba(255,42,42,0.15), rgba(255,42,42,0.05));
+  border-color: rgba(255,42,42,0.3);
+  color: var(--accent);
+}
+.nav-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+.nav-text {
+  font-size: 14px;
+}
+
+/* ===== 内容区 ===== */
+.content {
+  flex: 1;
+  padding: 25px;
+  overflow-y: auto;
+  background: var(--bg-primary);
+}
+.content-header {
+  margin-bottom: 20px;
+}
+.content-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 6px;
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  letter-spacing: 1px;
+}
+.content-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ===== 输入区域 ===== */
+.input-section {
+  margin-bottom: 20px;
+}
+.input-wrapper {
+  position: relative;
+  margin-bottom: 12px;
+}
+.main-input {
+  width: 100%;
+  padding: 16px 20px;
+  background: #111118;
+  border: 2px solid #ff0040;
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-family: inherit;
+  outline: none;
+  box-shadow: 0 0 10px rgba(255,0,64,0.5), 0 0 20px rgba(255,0,64,0.3);
+  transition: all 0.3s;
+}
+.main-input::placeholder {
+  color: #882233;
+}
+.main-input:focus {
+  border-color: #ff3366;
+  box-shadow: 0 0 15px rgba(255,0,64,0.7), 0 0 30px rgba(255,0,64,0.4), 0 0 45px rgba(255,0,64,0.2);
+  animation: breathe 2s infinite;
+}
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 10px rgba(255,0,64,0.5), 0 0 20px rgba(255,0,64,0.3); }
+  50% { box-shadow: 0 0 20px rgba(255,0,64,0.7), 0 0 40px rgba(255,0,64,0.4), 0 0 60px rgba(255,0,64,0.2); }
+}
+.input-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.input-hint .trigger-key {
+  background: rgba(255,42,42,0.15);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  border: 1px solid rgba(255,42,42,0.3);
+}
+
+/* ===== 按钮区域 ===== */
+.action-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.action-btn {
+  padding: 10px 18px;
+  background: var(--bg-tertiary);
+  border: 1px solid #ff0040;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.action-btn:hover {
+  background: var(--bg-hover);
+  border-color: #ff3366;
+  color: var(--text-primary);
+  box-shadow: 0 0 15px rgba(255,0,64,0.6);
+}
+.action-btn.primary {
+  background: linear-gradient(135deg, rgba(255,0,64,0.25), rgba(255,0,64,0.1));
+  border-color: rgba(255,0,64,0.5);
+  color: #ff6680;
+}
+.action-btn.primary:hover {
+  background: linear-gradient(135deg, rgba(255,0,64,0.4), rgba(255,0,64,0.2));
+  box-shadow: 0 0 20px rgba(255,0,64,0.6), 0 0 40px rgba(255,0,64,0.3);
+}
+
+#infoGrantBtn {
+  background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(59,130,246,0.1));
+  border-color: rgba(59,130,246,0.3);
+  color: var(--info);
+}
+#infoGrantBtn:hover {
+  background: linear-gradient(135deg, rgba(59,130,246,0.3), rgba(59,130,246,0.2));
+  box-shadow: 0 0 15px rgba(59,130,246,0.3);
+}
+
+/* ===== 识别标签 ===== */
+.recognition-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, rgba(255,42,42,0.15), rgba(255,42,42,0.05));
+  border: 1px solid rgba(255,42,42,0.3);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: var(--accent);
+  animation: slideIn 0.3s ease;
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ===== 功能卡片网格 ===== */
+.functions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.function-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,0,64,0.3);
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.function-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, #ff0040, transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.function-card:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: #ff0040;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.3), 0 0 15px rgba(255,0,64,0.5);
+}
+.function-card:hover::before {
+  opacity: 1;
+}
+.function-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.function-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.function-name.color-user { color: #00e5ff; }
+.function-name.color-network { color: #00ff88; }
+.function-name.color-firewall { color: #ffaa00; }
+.function-name.color-cron { color: #aa66ff; }
+.function-name.color-env { color: #ff66aa; }
+.function-name.color-protocol { color: #ffdd00; }
+.function-name.color-service { color: #4488ff; }
+.function-name.color-port { color: #ff4444; }
+.function-number {
+  width: auto;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  background: rgba(255,0,64,0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #ff0040;
+  border: 1px solid rgba(255,0,64,0.3);
+  font-family: 'Consolas', monospace;
+  letter-spacing: 0.5px;
+}
+.function-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.function-code {
+  font-size: 11px;
+  color: #ff0040;
+  margin-top: 8px;
+  font-family: 'Consolas', monospace;
+  opacity: 0.7;
+}
+
+/* ===== 执行结果 ===== */
+.result-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 20px;
+}
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.result-title {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.result-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 16px;
+}
+.result-close:hover {
+  background: var(--danger);
+  color: #fff;
+}
+.result-body {
+  padding: 18px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.result-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.result-status.success { color: var(--success); }
+.result-status.error { color: var(--danger); }
+.result-output {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ===== 容器检查页面 ===== */
+.scan-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+.scan-btn {
+  padding: 10px 20px;
+  background: rgba(255,0,64,0.08);
+  border: 1px solid #ff0040;
+  border-radius: 8px;
+  color: #ff6680;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.scan-btn:hover {
+  background: rgba(255,0,64,0.2);
+  box-shadow: 0 0 15px rgba(255,0,64,0.6);
+  transform: translateY(-2px);
+  color: #fff;
+}
+.scan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.container-status-input {
+  width: 100%;
+  padding: 12px 16px;
+  background: #111118;
+  border: 2px solid rgba(255,0,64,0.4);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  margin-bottom: 15px;
+  box-shadow: 0 0 8px rgba(255,0,64,0.2);
+}
+.container-status-input:focus {
+  border-color: #ff0040;
+  box-shadow: 0 0 12px rgba(255,0,64,0.5);
+}
+.container-status-input::placeholder {
+  color: #882233;
+}
+
+/* 统计卡片 - 6列（增加已停止） */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,0,64,0.3);
+  border-radius: 10px;
+  padding: 16px 8px;
+  text-align: center;
+  transition: all 0.3s;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: #ff0040;
+  box-shadow: 0 0 12px rgba(255,0,64,0.4);
+}
+.stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  font-family: 'Orbitron', 'Consolas', monospace;
+  letter-spacing: 1px;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* 容器卡片网格 */
+.container-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.container-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,0,64,0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.container-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  opacity: 0.9;
+}
+.container-card:hover {
+  transform: translateY(-2px);
+  border-color: #ff0040;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3), 0 0 12px rgba(255,0,64,0.35);
+}
+.container-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+.container-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+.container-card-number {
+  width: 26px;
+  height: 26px;
+  background: rgba(255,0,64,0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #ff0040;
+  border: 1px solid rgba(255,0,64,0.3);
+  flex-shrink: 0;
+  font-family: 'Consolas', monospace;
+  font-weight: 700;
+}
+.container-card-id {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'Consolas', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 0;
+}
+.container-card-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  min-height: 26px;
+}
+.container-card-status .status-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.container-card-status .status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.container-card-status .status-tag.running {
+  background: #004400;
+  color: #00ff88;
+  border: 1px solid rgba(0,255,136,0.3);
+}
+.container-card-status .status-tag.stopped {
+  background: #444444;
+  color: #ff4444;
+  border: 1px solid rgba(255,68,68,0.3);
+}
+.container-card-status .risk-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.container-card-status .risk-tag.severe { background: rgba(255,0,64,0.2); color: #ff0040; border: 1px solid rgba(255,0,64,0.4); }
+.container-card-status .risk-tag.high { background: rgba(255,102,0,0.2); color: #ff6600; border: 1px solid rgba(255,102,0,0.4); }
+.container-card-status .risk-tag.medium { background: rgba(255,204,0,0.15); color: #ffcc00; border: 1px solid rgba(255,204,0,0.4); }
+.container-card-status .risk-tag.low { background: rgba(0,255,136,0.1); color: #00ff88; border: 1px solid rgba(0,255,136,0.4); }
+.container-card-status .risk-tag.stopped-tag { background: rgba(100,100,100,0.2); color: #888; border: 1px solid rgba(100,100,100,0.4); }
+.container-card-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.container-card-info span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+}
+
+.status-severe { color: var(--danger); }
+.status-severe::before { background: var(--danger); }
+.status-high { color: var(--warning); }
+.status-high::before { background: var(--warning); }
+.status-medium { color: var(--info); }
+.status-medium::before { background: var(--info); }
+.status-safe { color: var(--success); }
+.status-safe::before { background: var(--success); }
+.status-stopped { color: var(--stopped); }
+.status-stopped::before { background: var(--stopped); }
+
+.card-severe { border-top: 3px solid var(--danger); }
+.card-high { border-top: 3px solid var(--warning); }
+.card-medium { border-top: 3px solid var(--info); }
+.card-safe { border-top: 3px solid var(--success); }
+.card-stopped { border-top: 3px solid var(--stopped); }
+
+.process-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.process-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  transition: all 0.2s;
+}
+.process-item:hover {
+  border-color: var(--accent);
+}
+.process-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.process-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.process-risk {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.process-risk.severe { background: rgba(239,68,68,0.2); color: var(--danger); }
+.process-risk.high { background: rgba(245,158,11,0.2); color: var(--warning); }
+.process-risk.medium { background: rgba(59,130,246,0.2); color: var(--info); }
+.process-risk.low { background: rgba(34,197,94,0.2); color: var(--success); }
+.process-risk.safe { background: rgba(100,100,120,0.2); color: var(--text-muted); }
+.process-details {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.process-flags {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.flag-tag {
+  padding: 3px 8px;
+  background: rgba(255,42,42,0.1);
+  border: 1px solid rgba(255,42,42,0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+/* ===== 关于页面 ===== */
+.about-container {
+  text-align: center;
+  padding: 60px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.about-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 30px;
+  background: #000;
+  border: 2px solid rgba(255,255,255,0.15);
+  position: relative;
+}
+.about-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  letter-spacing: 4px;
+}
+.about-subtitle {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-bottom: 35px;
+  letter-spacing: 2px;
+}
+.about-info {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  max-width: 520px;
+  margin: 0 auto;
+  width: 100%;
+}
+.info-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: left;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+.info-item:hover {
+  border-color: rgba(255,42,42,0.4);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3), 0 0 15px rgba(255,42,42,0.08);
+  transform: translateY(-2px);
+}
+.info-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, var(--accent), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.info-item:hover::before {
+  opacity: 1;
+}
+.info-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.info-value {
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* ===== 额外下载页面 ===== */
+.tools-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tool-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+}
+.tool-item:hover {
+  border-color: var(--accent);
+}
+.tool-info {
+  flex: 1;
+}
+.tool-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.tool-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.tool-version {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  display: inline-block;
+}
+.tool-version.installed {
+  background: rgba(34,197,94,0.15);
+  color: var(--success);
+  border: 1px solid rgba(34,197,94,0.3);
+}
+.tool-version.missing {
+  background: rgba(239,68,68,0.15);
+  color: var(--danger);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.tool-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+.install-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(255,42,42,0.2), rgba(255,42,42,0.1));
+  border: 1px solid rgba(255,42,42,0.3);
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  font-size: 13px;
+}
+.install-btn:hover {
+  background: linear-gradient(135deg, rgba(255,42,42,0.3), rgba(255,42,42,0.2));
+  box-shadow: 0 0 15px var(--accent-glow);
+}
+.install-cmd {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'Consolas', monospace;
+  background: var(--bg-primary);
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  user-select: all;
+}
+.install-cmd:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ===== 配置检查弹窗 ===== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(5,5,10,0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-overlay.show {
+  display: flex;
+}
+.modal-overlay::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(rgba(255,0,64,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,0,64,0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+.modal-box {
+  background: linear-gradient(180deg, #111118 0%, #0d0d14 100%);
+  border: 1px solid rgba(255,0,64,0.35);
+  border-radius: 12px;
+  padding: 28px;
+  width: 420px;
+  max-width: 90%;
+  box-shadow:
+    0 0 30px rgba(255,0,64,0.15),
+    0 0 60px rgba(255,0,64,0.08),
+    0 20px 60px rgba(0,0,0,0.5);
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+.modal-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #ff0040, #ff3366, #ff0040, transparent);
+  opacity: 0.8;
+}
+.modal-box::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,0,64,0.3), transparent);
+}
+/* 科幻角标 */
+.modal-box .cyber-corner {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  border-top: 2px solid rgba(255,0,64,0.5);
+  border-left: 2px solid rgba(255,0,64,0.5);
+  border-radius: 2px 0 0 0;
+}
+.modal-box .cyber-corner-br {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 16px;
+  height: 16px;
+  border-bottom: 2px solid rgba(255,0,64,0.3);
+  border-right: 2px solid rgba(255,0,64,0.3);
+  border-radius: 0 0 2px 0;
+}
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ff3366;
+  margin-bottom: 14px;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 2px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-shadow: 0 0 10px rgba(255,0,64,0.3);
+}
+.modal-desc {
+  font-size: 13px;
+  color: #a0a0b0;
+  margin-bottom: 18px;
+  line-height: 1.7;
+  background: rgba(255,0,64,0.03);
+  padding: 12px 14px;
+  border-radius: 8px;
+  border-left: 2px solid rgba(255,0,64,0.3);
+}
+.modal-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: #0a0a0f;
+  border: 1px solid rgba(255,0,64,0.3);
+  border-radius: 8px;
+  color: #f0f0f5;
+  font-size: 15px;
+  font-family: 'Consolas', monospace;
+  outline: none;
+  margin-bottom: 16px;
+  letter-spacing: 1px;
+  box-shadow: inset 0 0 10px rgba(255,0,64,0.05);
+  transition: all 0.2s;
+}
+.modal-input:focus {
+  border-color: #ff0040;
+  box-shadow: 0 0 12px rgba(255,0,64,0.2), inset 0 0 10px rgba(255,0,64,0.05);
+}
+.modal-input::placeholder {
+  color: #553344;
+}
+.modal-btns {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.modal-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  border: none;
+  transition: all 0.2s;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.modal-btn.cancel {
+  background: rgba(255,255,255,0.05);
+  color: #888888;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.modal-btn.cancel:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.2);
+  color: #cccccc;
+  transform: translateY(-1px);
+}
+.modal-btn.confirm {
+  background: linear-gradient(135deg, #ff0040, #ff3366);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(255,0,64,0.3);
+}
+.modal-btn.confirm:hover {
+  background: linear-gradient(135deg, #ff3366, #ff0040);
+  box-shadow: 0 0 25px rgba(255,0,64,0.5), 0 0 40px rgba(255,0,64,0.2);
+  transform: translateY(-2px);
+}
+.modal-error {
+  color: #ff4444;
+  font-size: 13px;
+  margin-bottom: 12px;
+  display: none;
+  padding: 8px 12px;
+  background: rgba(255,0,0,0.08);
+  border: 1px solid rgba(255,0,0,0.2);
+  border-radius: 6px;
+  font-weight: 600;
+}
+.modal-error.show {
+  display: block;
+}
+
+/* ===== 权限按钮 ===== */
+.grant-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(59,130,246,0.1));
+  border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 6px;
+  color: var(--info);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.grant-btn:hover {
+  background: linear-gradient(135deg, rgba(59,130,246,0.3), rgba(59,130,246,0.2));
+  box-shadow: 0 0 15px rgba(59,130,246,0.3);
+}
+.grant-btn.granted {
+  background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05));
+  border-color: rgba(34,197,94,0.3);
+  color: var(--success);
+  cursor: default;
+}
+.grant-btn.granted:hover {
+  box-shadow: none;
+}
+
+.action-btn.granted {
+  background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05)) !important;
+  border-color: rgba(34,197,94,0.3) !important;
+  color: var(--success) !important;
+  cursor: default !important;
+}
+.action-btn.granted:hover {
+  box-shadow: none !important;
+}
+
+.root-hint {
+  padding: 12px 16px;
+  background: rgba(59,130,246,0.1);
+  border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 8px;
+  color: var(--info);
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.root-hint .hint-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hidden { display: none !important; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ===== 容器详情全屏覆盖层 - 红色科幻风（B站CVE风格） ===== */
+.container-detail-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(ellipse at 20% 50%, rgba(255,0,64,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 50%, rgba(255,170,0,0.02) 0%, transparent 50%),
+    #0a0a0f;
+  display: none;
+  flex-direction: column;
+  z-index: 2000;
+  --neon-red: #ff0040;
+  --neon-pink: #ff3366;
+  --neon-yellow: #ffaa00;
+  --dark-bg: #0a0a0f;
+  --card-bg: #12121a;
+}
+/* 背景网格纹理 */
+.container-detail-overlay::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(rgba(255,0,64,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,0,64,0.015) 1px, transparent 1px);
+  background-size: 80px 80px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container-detail-overlay.show {
+  display: flex;
+}
+
+/* 黄红警戒线 + 动画 */
+
+.cd-alert-stripe {
+  height: 2px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, transparent, #4488ff, #00e5ff, #4488ff, transparent);
+  box-shadow: 0 0 8px rgba(68,136,255,0.6), 0 0 16px rgba(0,229,255,0.3);
+}
+.cd-alert-stripe-bottom {
+  height: 2px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, transparent, #4488ff, #00e5ff, #4488ff, transparent);
+  box-shadow: 0 0 8px rgba(68,136,255,0.6), 0 0 16px rgba(0,229,255,0.3);
+}
+
+/* 顶部标题栏（含X关闭） */
+.cd-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 32px 14px 32px;
+  background: linear-gradient(180deg, #11111a 0%, #0d0d14 100%);
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,0,64,0.2);
+  position: relative;
+}
+.cd-top-bar::before {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ff0040, #ff6600, #ffaa00, #ff0040, transparent);
+  opacity: 0.4;
+}
+/* 顶部系统状态 */
+.cd-top-bar::after {
+  content: 'SYSTEM ONLINE';
+  position: absolute;
+  top: 6px;
+  right: 80px;
+  font-family: 'Orbitron', monospace;
+  font-size: 8px;
+  color: rgba(0,255,136,0.4);
+  letter-spacing: 2px;
+}
+.cd-top-title-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  text-align: center;
+}
+/* 精美标题装饰行 - VULNERABILITY IDENTITY */
+.cd-title-deco-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.cd-title-deco-line {
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #ffaa00);
+}
+.cd-title-deco-line-right {
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, #ffaa00, transparent);
+}
+.cd-title-deco-diamond {
+  width: 7px;
+  height: 7px;
+  background: #ffaa00;
+  transform: rotate(45deg);
+  box-shadow: 0 0 8px #ffaa00;
+  flex-shrink: 0;
+}
+/* VULNERABILITY IDENTITY 装饰文字 */
+.cd-vuln-identity {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  color: #ffaa00;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.cd-vuln-identity .vuln-line {
+  width: 40px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,170,0,0.6));
+}
+.cd-vuln-identity .vuln-line-right {
+  width: 40px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255,170,0,0.6), transparent);
+}
+.cd-vuln-identity .vuln-diamond {
+  width: 5px;
+  height: 5px;
+  background: #ffaa00;
+  transform: rotate(45deg);
+  box-shadow: 0 0 6px #ffaa00;
+  flex-shrink: 0;
+}
+/* 容器名称橙色背景框 - 华丽装饰版 */
+.cd-container-name-wrap {
+  background: linear-gradient(135deg, rgba(255,170,0,0.12), rgba(255,102,0,0.08));
+  border: 1px solid rgba(255,170,0,0.35);
+  border-radius: 12px;
+  padding: 10px 28px;
+  box-shadow: 
+    0 0 20px rgba(255,170,0,0.12),
+    0 0 40px rgba(255,170,0,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+  position: relative;
+  overflow: hidden;
+}
+.cd-container-name-wrap::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,170,0,0.5), transparent);
+}
+.cd-container-name-wrap::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,102,0,0.3), transparent);
+}
+.cd-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: nowrap;
+}
+.cd-container-name {
+  font-size: 30px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 2px;
+  font-family: 'Orbitron', 'Consolas', monospace;
+  text-shadow: 
+    0 0 10px rgba(255,0,64,0.4),
+    0 0 30px rgba(255,0,64,0.2),
+    0 0 60px rgba(255,0,64,0.1);
+  background: linear-gradient(180deg, #ffffff 0%, #e0e0e0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.cd-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-family: 'Orbitron', sans-serif;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+.cd-status-badge.running {
+  color: #00ff88;
+  border-color: rgba(0,255,136,0.4);
+  background: rgba(0,255,136,0.08);
+  box-shadow: 0 0 10px rgba(0,255,136,0.15);
+}
+.cd-status-badge.stopped {
+  color: #ff4444;
+  border-color: rgba(255,68,68,0.4);
+  background: rgba(255,68,68,0.08);
+  box-shadow: 0 0 10px rgba(255,68,68,0.15);
+}
+.cd-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: nowrap;
+}
+.cd-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #888888;
+  font-family: 'Consolas', monospace;
+  white-space: nowrap;
+}
+.cd-meta-item .meta-icon { font-size: 14px; color: #666666; }
+.cd-meta-item .meta-value {
+  color: #cccccc;
+  background: rgba(255,255,255,0.04);
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  font-weight: 600;
+}
+.cd-close-x {
+  position: absolute;
+  right: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255,0,64,0.4);
+  background: rgba(255,0,64,0.08);
+  color: #ff6680;
+  cursor: pointer;
+  border-radius: 10px;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.cd-close-x:hover {
+  background: rgba(255,0,64,0.2);
+  color: #fff;
+  border-color: #ff0040;
+  box-shadow: 0 0 15px rgba(255,0,64,0.5);
+}
+
+/* 主内容区 - 只上下滚动 */
+.cd-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 28px 32px 32px 32px;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+  z-index: 1;
+}
+
+/* 上区域 - 三栏卡片（固定比例） */
+.cd-top-section {
+  display: grid;
+  grid-template-columns: 32% 36% 32%;
+  gap: 18px;
+  margin-bottom: 32px;
+}
+
+/* 通用卡片 - .cd-card 与 .cd-security-card 共享样式 (优化: 合并重复CSS) */
+.cd-card, .cd-security-card {
+  background: linear-gradient(180deg, #12121a 0%, #0e0e14 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  border-top: 2px solid rgba(255,0,64,0.3);
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.cd-card { padding: 24px; }
+.cd-security-card { padding: 20px 24px; }
+/* 赛博朋克装饰线条 */
+.cd-card::before, .cd-security-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #ff0040 20%, #ff3366 50%, #ff0040 80%, transparent 100%);
+  opacity: 0.6;
+}
+.cd-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #ff0040 30%, #ffaa00 70%, transparent 100%);
+  opacity: 0.4;
+}
+/* ===== 赛博科幻风面板装饰 ===== */
+
+/* 角标 - cd-card 与 cd-security-card 共享 */
+.cd-card .cyber-corner, .cd-security-card .cyber-corner {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  border-top: 2px solid rgba(255,0,64,0.6);
+  border-left: 2px solid rgba(255,0,64,0.6);
+  border-radius: 2px 0 0 0;
+}
+.cd-card .cyber-corner-br, .cd-security-card .cyber-corner-br {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-bottom: 2px solid rgba(255,0,64,0.4);
+  border-right: 2px solid rgba(255,0,64,0.4);
+  border-radius: 0 0 2px 0;
+}
+.cd-card .cyber-corner-tr, .cd-security-card .cyber-corner-tr {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  border-top: 2px solid rgba(255,170,0,0.4);
+  border-right: 2px solid rgba(255,170,0,0.4);
+  border-radius: 0 2px 0 0;
+}
+.cd-card .cyber-corner-bl, .cd-security-card .cyber-corner-bl {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 12px;
+  height: 12px;
+  border-bottom: 2px solid rgba(255,170,0,0.4);
+  border-left: 2px solid rgba(255,170,0,0.4);
+  border-radius: 0 0 0 2px;
+}
+/* cd-card 独有: transition */
+.cd-card .cyber-corner, .cd-card .cyber-corner-br { transition: all 0.3s ease; }
+
+/* 边框发光脉冲 - 轻微不卡 */
+.cd-card {
+  box-shadow: 0 0 0 1px rgba(255,0,64,0.15), inset 0 0 20px rgba(255,0,64,0.03);
+}
+
+
+
+
+
+/* 侧边HUD标记 - cd-card 与 cd-security-card 共享 */
+.cd-card .hud-side-mark, .cd-security-card .hud-side-mark {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 40px;
+  background: linear-gradient(180deg, transparent, rgba(255,0,64,0.5), transparent);
+  opacity: 0.6;
+}
+
+/* 底部状态指示器 - cd-card 与 cd-security-card 共享 */
+.cd-card .hud-status-dot, .cd-security-card .hud-status-dot {
+  position: absolute;
+  bottom: 12px;
+  right: 36px;
+  width: 4px;
+  height: 4px;
+  background: #00ff88;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #00ff88;
+}
+
+/* 角落数字标记 - 系统面板风格 - cd-card 与 cd-security-card 共享 */
+.cd-card .panel-index, .cd-security-card .panel-index {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  color: rgba(255,255,255,0.15);
+  letter-spacing: 1px;
+}
+
+
+
+.cd-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #cccccc;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255,0,64,0.2);
+  padding-bottom: 10px;
+  font-family: 'Orbitron', sans-serif;
+  position: relative;
+}
+/* 标题左侧发光竖线 */
+.cd-card-title::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: linear-gradient(180deg, #ff0040, #ff6600);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(255,0,64,0.6);
+  flex-shrink: 0;
+}
+/* 标题右侧装饰点 */
+.cd-card-title::after {
+  content: '';
+  width: 4px;
+  height: 4px;
+  background: #ffaa00;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #ffaa00;
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+/* 左栏 - 风险评分卡片 */
+.cd-score-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(180deg, #151018 0%, #0f0f14 100%);
+  border-top: 2px solid rgba(255,0,64,0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.cd-score-ring-wrap {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 10px auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cd-score-ring-svg {
+  width: 200px;
+  height: 200px;
+  transform: rotate(-90deg);
+  filter: drop-shadow(0 0 15px rgba(255,0,64,0.5));
+}
+.cd-score-ring-bg {
+  fill: none;
+  stroke: rgba(255,255,255,0.05);
+  stroke-width: 8;
+}
+.cd-score-ring-fill {
+  fill: none;
+  stroke: #ff0040;
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+.cd-score-ring-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  width: 100%;
+}
+.cd-score-number {
+  font-size: 64px;
+  font-weight: 900;
+  line-height: 1;
+  font-family: 'Orbitron', 'Consolas', 'Arial Black', sans-serif;
+  letter-spacing: -2px;
+  text-shadow: 0 0 16px currentColor, 0 0 32px currentColor;
+  display: inline-block;
+}
+.cd-score-number.score-s1 { color: #00ff88; }
+.cd-score-number.score-s2 { color: #ffcc00; }
+.cd-score-number.score-s3 { color: #ff6600; }
+.cd-score-number.score-s4 { color: #ff0040; }
+.cd-score-number.score-s5 {
+  color: #ff0000;
+  filter: drop-shadow(0 0 16px #ff0000) drop-shadow(0 0 32px #ff0040);
+}
+.cd-score-slash {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #a0a0b0;
+  font-family: 'Orbitron', 'Consolas', monospace;
+  letter-spacing: 1px;
+  opacity: 0.9;
+}
+.cd-score-bar-wrap {
+  margin: 0 4px 16px 4px;
+  width: 100%;
+}
+.cd-score-bar-bg {
+  height: 6px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.cd-score-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #00ff88 0%, #aaff44 20%, #ffdd00 40%, #ff6600 70%, #ff0040 100%);
+  box-shadow: 0 0 12px rgba(255,0,64,0.5);
+  width: 0%;
+  /* 初始宽度0，由JS动画控制 */
+}
+.cd-risk-level-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 36px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  margin: 0 auto;
+  width: fit-content;
+  border: 1px solid;
+  background: rgba(0,0,0,0.3);
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+}
+.cd-risk-level-badge.level-s1 {
+  color: #00ff88;
+  border-color: rgba(0,255,136,0.6);
+  background: rgba(0,255,136,0.1);
+  box-shadow: 0 0 15px rgba(0,255,136,0.2);
+}
+.cd-risk-level-badge.level-s2 {
+  color: #ffcc00;
+  border-color: rgba(255,204,0,0.6);
+  background: rgba(255,204,0,0.1);
+  box-shadow: 0 0 15px rgba(255,204,0,0.2);
+}
+.cd-risk-level-badge.level-s3 {
+  color: #ff6600;
+  border-color: rgba(255,102,0,0.6);
+  background: rgba(255,102,0,0.1);
+  box-shadow: 0 0 15px rgba(255,102,0,0.2);
+}
+.cd-risk-level-badge.level-s4 {
+  color: #ff0040;
+  border-color: rgba(255,0,64,0.6);
+  background: rgba(255,0,64,0.12);
+  box-shadow: 0 0 15px rgba(255,0,64,0.25);
+}
+.cd-risk-level-badge.level-s5 {
+  color: #ff0000;
+  border-color: rgba(255,0,0,0.7);
+  background: rgba(255,0,0,0.15);
+  box-shadow: 0 0 18px rgba(255,0,0,0.35), 0 0 30px rgba(255,0,0,0.2);
+}
+
+/* 中栏 - 基本信息 */
+.cd-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cd-info-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+/* 信息行左侧发光条 */
+.cd-info-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 60%;
+  background: linear-gradient(180deg, #ff0040, #ff6600);
+  border-radius: 0 2px 2px 0;
+  opacity: 0.3;
+}
+.cd-info-icon {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #aaaaaa;
+  font-size: 15px;
+  flex-shrink: 0;
+  margin-right: 14px;
+}
+.cd-info-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+}
+.cd-info-label {
+  font-size: 12px;
+  color: #888888;
+  letter-spacing: 0.8px;
+  font-weight: 600;
+  min-width: 80px;
+  white-space: nowrap;
+}
+.cd-info-value {
+  font-size: 13px;
+  color: #cccccc;
+  font-weight: 500;
+  font-family: 'Consolas', monospace;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  padding: 3px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.cd-info-value.image-val { color: #cccccc; border-color: rgba(255,255,255,0.08); }
+.cd-info-value.running-val { color: #00ff88; border-color: rgba(0,255,136,0.25); }
+.cd-info-value.stopped-val { color: #ff4444; border-color: rgba(255,68,68,0.2); }
+
+/* 右栏 - 风险代号/标签区 */
+.cd-tags-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+.cd-risk-tag {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #cccccc;
+  cursor: default;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+/* 标签左侧发光条 */
+.cd-risk-tag::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 70%;
+  background: currentColor;
+  border-radius: 0 2px 2px 0;
+  opacity: 0.3;
+}
+.cd-risk-tag .tag-icon {
+  color: #aaaaaa;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.cd-risk-tag.warning-tag {
+  background: rgba(255,170,0,0.08);
+  border-color: rgba(255,170,0,0.3);
+  color: #ccaa66;
+}
+.cd-risk-tag.warning-tag .tag-icon { color: #ccaa66; }
+.cd-risk-tag.info-tag {
+  background: rgba(68,136,255,0.06);
+  border-color: rgba(68,136,255,0.25);
+  color: #88aadd;
+}
+.cd-risk-tag.info-tag .tag-icon { color: #88aadd; }
+.cd-empty-tags {
+  text-align: center;
+  padding: 36px 14px;
+  color: #888888;
+  font-size: 13px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(255,255,255,0.15);
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* 下区域 */
+.cd-bottom-section {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* 权限检查器标题 */
+.cd-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-wrap: nowrap;
+  gap: 12px;
+}
+.cd-section-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.cd-section-title .title-icon {
+  background: rgba(255,255,255,0.06);
+  color: #aaaaaa;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.cd-section-title .count-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffaa00;
+  background: rgba(255,170,0,0.1);
+  border: 1px solid rgba(255,170,0,0.35);
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+.cd-section-legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 12px;
+  color: #888888;
+  flex-wrap: nowrap;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cd-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cd-legend-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+.cd-legend-dot.ok {
+  background: #00ff88;
+  color: #0a0a0f;
+  border: none;
+  box-shadow: 0 0 8px rgba(0,255,136,0.6);
+}
+.cd-legend-dot.no {
+  background: #333;
+  color: #666;
+  border: 1px solid #444;
+}
+.cd-legend-dot.danger {
+  background: rgba(255,0,64,0.1);
+  border: 2px solid #ff0040;
+  box-shadow: 0 0 8px rgba(255,0,64,0.6);
+}
+
+/* CAP权限网格 - 固定6列 */
+.cd-cap-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+.cd-cap-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  cursor: default;
+  position: relative;
+  transition: all 0.2s;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+/* CAP项左侧科技标记 */
+.cd-cap-item::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 70%;
+  background: currentColor;
+  border-radius: 0 2px 2px 0;
+  opacity: 0.3;
+}
+.cd-cap-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.cd-cap-item.cap-ok {
+  background: #00ff88;
+  color: #0a0a0f;
+  border: none;
+  box-shadow: 0 0 10px rgba(0,255,136,0.5);
+}
+
+.cd-cap-item.cap-ok .cd-cap-icon {
+  background: rgba(0,0,0,0.2);
+  color: #fff;
+}
+.cd-cap-item.cap-ok .cd-cap-name {
+  color: #0a0a0f;
+  font-weight: 800;
+}
+.cd-cap-item.cap-no {
+  background: #333;
+  color: #666;
+  border: 1px solid #444;
+  opacity: 0.9;
+}
+.cd-cap-item.cap-no .cd-cap-icon {
+  background: rgba(255,255,255,0.05);
+  color: #666;
+  border: 1px dashed #555;
+}
+.cd-cap-item.cap-no .cd-cap-name { color: #888; }
+.cd-cap-item.cap-danger {
+  border: 2px solid #ff0040 !important;
+  box-shadow: 0 0 10px #ff0040, 0 0 20px rgba(255,0,64,0.3) !important;
+  background: rgba(255,0,64,0.15) !important;
+  color: #ff0040 !important;
+}
+.cd-cap-item.cap-danger .cd-cap-name {
+  color: #ff0040 !important;
+}
+.cd-cap-danger-mark {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  background: #ff0040;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #ff0040;
+}
+.cd-cap-name {
+  font-size: 13px;
+  font-weight: 800;
+  font-family: 'Consolas', 'Courier New', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.3px;
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 底部信息卡片 - 端口 / 挂载 */
+.cd-bottom-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.cd-list-card { display: flex; flex-direction: column; }
+.cd-list-card .cd-card-title { margin-bottom: 16px; }
+.cd-list-empty {
+  padding: 28px;
+  text-align: center;
+  color: #666666;
+  font-size: 13px;
+  background: rgba(255,255,255,0.02);
+  border: 1px dashed rgba(255,255,255,0.1);
+  border-radius: 10px;
+  font-weight: 500;
+}
+.cd-list-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  font-family: 'Consolas', monospace;
+  gap: 12px;
+  transition: all 0.2s;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+.cd-list-row:last-child { margin-bottom: 0; }
+/* 列表行左侧发光条 */
+.cd-list-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 60%;
+  background: linear-gradient(180deg, #ff0040, #ff6600);
+  border-radius: 0 2px 2px 0;
+  opacity: 0.3;
+}
+.cd-list-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 13px;
+  background: rgba(255,255,255,0.06);
+  color: #888888;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.cd-list-main {
+  flex: 1;
+  min-width: 0;
+  color: #d8d8e8;
+  line-height: 1.5;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cd-list-main .part-highlight {
+  color: #cccccc;
+  font-weight: 700;
+}
+.cd-list-main .part-arrow {
+  color: #888888;
+  margin: 0 6px;
+  font-weight: 800;
+}
+
+/* 底部栏 - 科技感 */
+.cd-footer-bar {
+  padding: 16px 32px;
+  background: linear-gradient(180deg, #11111a 0%, #0d0d14 100%);
+  border-top: 1px solid rgba(255,0,64,0.25);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  position: relative;
+}
+.cd-footer-bar::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ff0040, #ff6600, #ffaa00, #ff0040, transparent);
+  opacity: 0.5;
+}
+/* 底部状态指示灯 */
+.cd-footer-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 6px;
+  left: 32px;
+  width: 6px;
+  height: 6px;
+  background: #00ff88;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #00ff88;
+}
+.cd-close-btn {
+  padding: 12px 36px;
+  background: rgba(255,0,64,0.15);
+  border: 1px solid #ff0040;
+  border-radius: 10px;
+  color: #ff6680;
+  cursor: pointer;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 1.5px;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.cd-close-btn:hover {
+  background: rgba(255,0,64,0.28);
+  color: #fff;
+  border-color: #ff3366;
+  box-shadow: 0 0 20px rgba(255,0,64,0.5), 0 0 40px rgba(255,0,64,0.2);
+}
+
+
+/* 滚动条 */
+.cd-scroll-area::-webkit-scrollbar,
+.cd-tags-area::-webkit-scrollbar { width: 6px; }
+.cd-scroll-area::-webkit-scrollbar-track,
+.cd-tags-area::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+.cd-scroll-area::-webkit-scrollbar-thumb,
+.cd-tags-area::-webkit-scrollbar-thumb {
+  background: rgba(255,0,64,0.3);
+  border-radius: 3px;
+}
+
+/* ===== 安全检查项样式 ===== */
+.cd-security-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+/* .cd-security-card 样式已合并到 .cd-card 共享选择器中 (优化: 删除重复CSS) */
+
+.cd-security-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 1200px) {
+  .cd-security-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 800px) {
+  .cd-security-grid { grid-template-columns: 1fr; }
+}
+
+.cd-sec-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.cd-sec-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 60%;
+  background: linear-gradient(180deg, #ff0040, #ff6600);
+  border-radius: 0 2px 2px 0;
+  opacity: 0.3;
+}
+.cd-sec-item:hover {
+  border-color: rgba(255,0,64,0.3);
+  background: rgba(255,255,255,0.05);
+}
+
+.cd-sec-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.cd-sec-icon.pass {
+  background: rgba(0,255,136,0.15);
+  color: #00ff88;
+  border: 1px solid rgba(0,255,136,0.3);
+  box-shadow: 0 0 8px rgba(0,255,136,0.2);
+}
+.cd-sec-icon.fail {
+  background: rgba(255,0,64,0.15);
+  color: #ff0040;
+  border: 1px solid rgba(255,0,64,0.3);
+  box-shadow: 0 0 8px rgba(255,0,64,0.2);
+}
+.cd-sec-icon.warn {
+  background: rgba(255,170,0,0.15);
+  color: #ffaa00;
+  border: 1px solid rgba(255,170,0,0.3);
+  box-shadow: 0 0 8px rgba(255,170,0,0.2);
+}
+.cd-sec-icon.info {
+  background: rgba(68,136,255,0.15);
+  color: #4488ff;
+  border: 1px solid rgba(68,136,255,0.3);
+  box-shadow: 0 0 8px rgba(68,136,255,0.2);
+}
+.cd-sec-icon.na {
+  background: rgba(100,100,100,0.1);
+  color: #666;
+  border: 1px solid rgba(100,100,100,0.2);
+}
+
+.cd-sec-body {
+  flex: 1;
+  min-width: 0;
+}
+.cd-sec-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cccccc;
+  letter-spacing: 0.5px;
+  line-height: 1.3;
+  margin-bottom: 3px;
+}
+.cd-sec-desc {
+  font-size: 11px;
+  color: #888888;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.cd-sec-risk {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+  display: inline-block;
+  letter-spacing: 0.5px;
+}
+.cd-sec-risk.critical {
+  background: rgba(255,0,0,0.15);
+  color: #ff0000;
+  border: 1px solid rgba(255,0,0,0.4);
+  box-shadow: 0 0 8px rgba(255,0,0,0.3);
+}
+.cd-sec-risk.critical-pass {
+  background: rgba(0,255,136,0.12);
+  color: #00ff88;
+  border: 1px solid rgba(0,255,136,0.3);
+  box-shadow: 0 0 8px rgba(0,255,136,0.2);
+}
+.cd-sec-risk.high {
+  background: rgba(255,0,64,0.12);
+  color: #ff0040;
+  border: 1px solid rgba(255,0,64,0.3);
+  box-shadow: 0 0 8px rgba(255,0,64,0.2);
+}
+.cd-sec-risk.high-pass {
+  background: rgba(0,255,136,0.1);
+  color: #00ff88;
+  border: 1px solid rgba(0,255,136,0.3);
+  box-shadow: 0 0 8px rgba(0,255,136,0.15);
+}
+.cd-sec-risk.medium {
+  background: rgba(255,170,0,0.12);
+  color: #ffaa00;
+  border: 1px solid rgba(255,170,0,0.3);
+  box-shadow: 0 0 8px rgba(255,170,0,0.2);
+}
+.cd-sec-risk.medium-pass {
+  background: rgba(0,255,136,0.08);
+  color: #00ff88;
+  border: 1px solid rgba(0,255,136,0.25);
+  box-shadow: 0 0 8px rgba(0,255,136,0.1);
+}
+.cd-sec-risk.low {
+  background: rgba(0,255,136,0.1);
+  color: #00ff88;
+  border: 1px solid rgba(0,255,136,0.3);
+}
+.cd-sec-risk.low-pass {
+  background: rgba(0,255,136,0.08);
+  color: #00cc66;
+  border: 1px solid rgba(0,255,136,0.2);
+}
+.cd-sec-risk.safe {
+  background: rgba(0,255,136,0.15);
+  color: #00ff88;
+  border: 1px solid rgba(0,255,136,0.4);
+  box-shadow: 0 0 8px rgba(0,255,136,0.2);
+}
+.cd-sec-risk.na {
+  background: rgba(80,80,80,0.15);
+  color: #888;
+  border: 1px solid rgba(100,100,100,0.25);
+}
+
+.cd-sec-category-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffaa00;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Orbitron', sans-serif;
+}
+.cd-sec-category-title::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: linear-gradient(180deg, #ff0040, #ff6600);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(255,0,64,0.6);
+}
+
+.cd-dynamic-hint {
+  padding: 12px 16px;
+  background: rgba(68,136,255,0.08);
+  border: 1px solid rgba(68,136,255,0.25);
+  border-radius: 10px;
+  color: #88aadd;
+  font-size: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cd-dynamic-hint .hint-icon {
+  font-size: 16px;
+}
+
+</style>
+<base target="_blank">
+</head>
+<body>
+
+<!-- 标题栏 -->
+<div class="title-bar">
+  <div class="title-left">
+    <div class="title-logo" style="background:#000;border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-size:22px;font-weight:900;color:#fff;letter-spacing:0;">W</div>
+    <div class="title-text">W-DD 看守者-防线部署</div>
+  </div>
+  <div class="title-right">
+    <div class="version">W-DD.V-0.2</div>
+    <button class="close-btn" onclick="closeApp()">&#x2715;</button>
+  </div>
+</div>
+
+<!-- 主布局 -->
+<div class="main-container">
+  <!-- 侧边栏 -->
+  <div class="sidebar">
+    <div class="nav-item active" data-page="info" onclick="switchPage('info')">
+      <span class="nav-icon">&#x1F50D;</span>
+      <span class="nav-text">信息模块</span>
+    </div>
+    <div class="nav-item" data-page="container" onclick="switchPage('container')">
+      <span class="nav-icon">&#x1F433;</span>
+      <span class="nav-text">容器模块</span>
+    </div>
+    <div class="nav-item" data-page="deploy" onclick="switchPage('deploy')">
+      <span class="nav-icon">&#x1F6E1;</span>
+      <span class="nav-text">防线部署</span>
+    </div>
+    <div class="nav-item" data-page="tools" onclick="switchPage('tools')">
+      <span class="nav-icon">&#x1F4E6;</span>
+      <span class="nav-text">额外下载</span>
+    </div>
+    <div class="nav-item" data-page="about" onclick="switchPage('about')">
+      <span class="nav-icon">&#x1F4C4;</span>
+      <span class="nav-text">关于</span>
+    </div>
+  </div>
+
+  <!-- 内容区 -->
+  <div class="content">
+    <!-- 信息收集页面 -->
+    <div id="page-info">
+      <div class="content-header">
+        <div class="content-title">信息收集模块</div>
+        <div class="content-desc">识别输入类型，自动匹配检测功能</div>
+      </div>
+
+      <div class="input-section">
+        <div class="input-wrapper">
+          <input type="text" class="main-input" id="mainInput" placeholder="输入框......." oninput="debouncedHandleInput()" onkeydown="handleInputKey(event)">
+        </div>
+        <div class="input-hint">
+          <span>&#x1F4A1; 查看使用说明</span>
+          <span class="trigger-key">信息收集模块</span>
+          <span>区域</span>
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <button class="action-btn primary" onclick="selectFile()">
+          <span>&#x1F4C1;</span> 选择文件
+        </button>
+        <button class="action-btn primary" onclick="selectDirectory()">
+          <span>&#x1F4C2;</span> 选择文件夹
+        </button>
+        <button class="action-btn" id="infoGrantBtn" onclick="showRootGrantModal()">
+          <span>&#x1F510;</span> 赋予权限
+        </button>
+        <button class="action-btn" onclick="switchPage('tools')">
+          <span>&#x1F4E6;</span> 额外下载
+        </button>
+      </div>
+
+      <div id="recognitionArea"></div>
+      <div id="functionsArea"></div>
+      <div id="resultArea"></div>
+    </div>
+
+    <!-- 容器检查页面 -->
+    <div id="page-container" class="hidden">
+      <div class="content-header">
+        <div class="content-title">容器模块-功能：检查/加固</div>
+        <div class="content-desc">深度扫描容器进程，检测安全风险</div>
+      </div>
+
+      <input type="text" class="container-status-input" id="containerStatusInput" placeholder="输入容器信息进行筛选......." onkeydown="handleContainerStatusKey(event)">
+
+      <div class="scan-controls">
+        <button class="scan-btn" onclick="scanContainers('quick')">快速扫描</button>
+        <button class="scan-btn" onclick="scanContainers('standard')">标准扫描</button>
+        <button class="scan-btn" onclick="scanContainers('full')">完整扫描</button>
+      </div>
+
+      <!-- 6列统计（增加已停止） -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--text-primary)">0</div>
+          <div class="stat-label">总进程</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--danger)">0</div>
+          <div class="stat-label">严重</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--warning)">0</div>
+          <div class="stat-label">高危</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--info)">0</div>
+          <div class="stat-label">中危</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--success)">0</div>
+          <div class="stat-label">安全</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--stopped)">0</div>
+          <div class="stat-label">已停止</div>
+        </div>
+      </div>
+
+      <div class="container-grid" id="containerGrid"></div>
+      <div class="process-list hidden" id="processList"></div>
+
+    </div>
+
+    <!-- 额外下载页面 -->
+    <div id="page-tools" class="hidden">
+      <div class="content-header">
+        <div class="content-title">额外下载</div>
+        <div class="content-desc">检测并安装所需的安全工具,点击未下载的下方复制下载代码后打开终端粘贴下载</div>
+      </div>
+      <div id="rootGrantArea" style="margin-bottom: 20px;">
+        <div class="root-hint" id="rootGrantHint">
+          <span class="hint-text">
+            <span>&#x1F510;</span>
+            <span>部分功能（防火墙配置、端口占用、定时任务、端口扫描、Traceroute、配置检查）需要root权限</span>
+          </span>
+          <button class="grant-btn" id="grantRootBtn" onclick="showRootGrantModal()">
+            <span>&#x1F510;</span> 赋予权限
+          </button>
+        </div>
+      </div>
+      <div class="tools-grid" id="toolsGrid">
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 防线部署页面 -->
+    <div id="page-deploy" class="hidden">
+      <div class="content-header">
+        <div class="content-title">防线部署</div>
+        <div class="content-desc">容器安全加固策略部署</div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <button class="scan-btn" id="deployExecuteBtn" onclick="executeDeploy()" style="margin:0;">加固</button>
+        <div id="deployProgressArea" style="flex:1;margin-left:15px;display:none;">
+          <div style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;height:20px;overflow:hidden;">
+            <div id="deployProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg,var(--accent),#ff5555);transition:width 0.3s;"></div>
+          </div>
+          <div id="deployProgressText" style="font-size:12px;color:var(--text-muted);margin-top:4px;text-align:right;">0%</div>
+        </div>
+      </div>
+
+      <div style="font-size:13px;color:var(--accent);margin-bottom:6px;font-weight:600;">选择加固方式</div>
+      <div style="display:flex;gap:10px;margin-bottom:15px;">
+        <div style="flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+          <div style="font-size:12px;color:var(--success);margin-bottom:6px;font-weight:600;">&#x2705; 可动态加固（无需重启）</div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="network_isolate" style="width:14px;height:14px;">
+              <span>网络隔离</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="cgroups_limit" style="width:14px;height:14px;">
+              <span>资源限制（CPU/内存）</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="pause" style="width:14px;height:14px;">
+              <span>容器暂停</span>
+            </label>
+          </div>
+        </div>
+        <div style="flex:2;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+          <div style="font-size:12px;color:var(--warning);margin-bottom:6px;font-weight:600;">&#x26A0; 需重启加固（建议批量操作）</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="drop_privileged" style="width:14px;height:14px;">
+              <span>移除特权模式</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="drop_capabilities" style="width:14px;height:14px;">
+              <span>降权运行（drop all caps）</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="non_root_user" style="width:14px;height:14px;">
+              <span>非 root 用户运行</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="seccomp" style="width:14px;height:14px;">
+              <span>系统调用过滤（seccomp）</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="apparmor" style="width:14px;height:14px;">
+              <span>文件访问控制（AppArmor）</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="read_only_rootfs" style="width:14px;height:14px;">
+              <span>只读根文件系统</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:2px 0;">
+              <input type="checkbox" class="deploy-opt" value="no_new_privileges" style="width:14px;height:14px;">
+              <span>禁止提权（no-new-privileges）</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:13px;color:var(--accent);margin:10px 0 6px 0;font-weight:600;display:flex;align-items:center;gap:12px;">
+        <span>选择容器</span>
+        <span style="font-size:11px;color:var(--text-muted);font-weight:normal;">
+          <span style="display:inline-block;width:10px;height:10px;background:var(--success);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>运行中
+          <span style="display:inline-block;width:10px;height:10px;background:#444;border-radius:2px;margin-left:10px;margin-right:4px;vertical-align:middle;"></span>已停止
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;">
+          <input type="checkbox" id="deploySelectAll" onchange="toggleSelectAllDeploy()" style="width:14px;height:14px;">
+          <span>全选</span>
+        </label>
+        <span id="deploySelectedCount" style="font-size:12px;color:var(--text-muted);">已选 0 个</span>
+      </div>
+      <div id="deployContainerList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;max-height:calc(100vh - 450px);overflow-y:auto;padding:4px;">
+        <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted);">点击加载容器列表...</div>
+      </div>
+    </div>
+
+    <!-- 关于页面 -->
+    <div id="page-about" class="hidden">
+      <div class="about-container">
+        <div class="about-logo" style="background:#000;border:2px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-size:60px;font-weight:900;color:#fff;letter-spacing:0;box-shadow:0 0 30px rgba(255,0,64,0.3),0 0 60px rgba(255,0,64,0.1);">W</div>
+        <div class="about-title">W-DD 看守者-防线部署</div>
+        <div class="about-subtitle" style="font-family:'Georgia','Times New Roman',serif;font-style:italic;letter-spacing:1.5px;">Warden Defense Deployment</div>
+        <div class="about-info">
+          <div class="info-item">
+            <div class="info-label">版本</div>
+            <div class="info-value">W-DD.V-0.2</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">作者</div>
+            <div class="info-value">LiQiu</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">QQ</div>
+            <div class="info-value">1703413136</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">gitee</div>
+            <div class="info-value">wuyudeliqiu</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 权限赋予弹窗 -->
+<div class="modal-overlay" id="rootGrantModal">
+  <div class="modal-box">
+    <div class="cyber-corner"></div>
+    <div class="cyber-corner-br"></div>
+    <div class="modal-title">&#x1F510; 赋予root权限</div>
+    <div class="modal-desc">以下功能需要root权限才能执行：<br>防火墙配置、端口占用、定时任务、端口扫描、Traceroute、配置检查、容器检查<br><br>请输入您的sudo密码，赋予一次后所有功能均可使用。</div>
+    <div class="modal-error" id="modalError">密码错误，请重新输入</div>
+    <input type="password" class="modal-input" id="rootPasswordInput" placeholder="输入sudo密码..." onkeydown="if(event.key==='Enter')submitRootPassword()">
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="hideRootGrantModal()">取消</button>
+      <button class="modal-btn confirm" onclick="submitRootPassword()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- 容器详情全屏覆盖层 - B站漏洞详情风格 -->
+<div class="container-detail-overlay" id="containerDetailOverlay">
+  <div class="cd-alert-stripe"></div>
+  <div class="cd-top-bar">
+    <div class="cd-top-title-row">
+      <!-- VULNERABILITY IDENTITY 装饰 -->
+      <div class="cd-vuln-identity">
+        <div class="vuln-line"></div>
+        <div class="vuln-diamond"></div>
+        <span>VULNERABILITY IDENTITY</span>
+        <div class="vuln-diamond"></div>
+        <div class="vuln-line-right"></div>
+      </div>
+      <!-- 精美标题装饰行 -->
+      <div class="cd-title-deco-row">
+        <div class="cd-title-deco-line"></div>
+        <div class="cd-title-deco-diamond"></div>
+        <div class="cd-title-deco-line-right"></div>
+      </div>
+      <!-- 容器名称 + 状态 -->
+      <div class="cd-name-row">
+        <div class="cd-container-name-wrap">
+          <span class="cd-container-name" id="cdContainerName">-</span>
+        </div>
+        <span class="cd-status-badge" id="cdStatusBadge">运行中</span>
+      </div>
+      <div class="cd-meta-row">
+        <div class="cd-meta-item">
+          <span class="meta-icon">&#x1F194;</span>
+          <span>ID:</span>
+          <span class="meta-value" id="cdContainerId">-</span>
+        </div>
+        <div class="cd-meta-item">
+          <span class="meta-icon">&#x1F433;</span>
+          <span>类型:</span>
+          <span class="meta-value" id="cdContainerType">-</span>
+        </div>
+      </div>
+    </div>
+    <button class="cd-close-x" onclick="closeContainerDetail()">&#x2715;</button>
+  </div>
+  <div class="cd-scroll-area" id="cdScrollArea"></div>
+  <div class="cd-footer-bar">
+    <button class="cd-close-btn" onclick="closeContainerDetail()">
+      <span>&#x2715;</span> 关闭
+    </button>
+  </div>
+  <div class="cd-alert-stripe-bottom"></div>
+</div>
+
+<script>
+// ==================== 全局状态 ====================
+let currentPage = 'info';
+let currentFunctions = [];
+let currentCategory = '系统检查';
+let rootPasswordSet = false;
+let lastScanResult = null;
+let currentDetailId = null; // 异步容器详情竞态守卫
+
+// ==================== XSS 防护：HTML 转义工具 ====================
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+// 输入防抖工具
+function debounce(fn, delay) {
+  let timer = null;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+// ==================== 页面切换 ====================
+function switchPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+  document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+
+  document.querySelectorAll('[id^="page-"]').forEach(p => p.classList.add('hidden'));
+  document.getElementById(`page-${page}`).classList.remove('hidden');
+
+  if (page === 'tools') {
+    loadToolsStatus();
+    checkRootStatus();
+  }
+
+  if (page === 'deploy') {
+    if (!rootPasswordSet) {
+      showRootGrantModal();
+    }
+    selectedDeployContainers.clear();
+    document.getElementById('deploySelectAll').checked = false;
+    document.getElementById('deploySelectedCount').textContent = '已选 0 个';
+    document.querySelectorAll('.deploy-opt').forEach(cb => cb.checked = false);
+    document.getElementById('deployProgressArea').style.display = 'none';
+    document.getElementById('deployExecuteBtn').textContent = '加固';
+    document.getElementById('deployExecuteBtn').disabled = false;
+    loadDeployContainers();
+  }
+}
+
+async function checkRootStatus() {
+  try {
+    const status = await window.go.main.App.CheckRootStatus();
+    if (status && status.hasRoot) {
+      rootPasswordSet = true;
+      updateRootGrantUI();
+    }
+  } catch (e) {
+    console.log('检查权限状态失败:', e);
+  }
+}
+
+// ==================== 核心修复：统一输入处理 ====================
+
+// 【修复1】提取"有效输入"（去掉末尾的逗号+数字触发器，支持可选空格）
+function extractEffectiveInput(rawValue) {
+  let input = rawValue.trim();
+  // 先去掉末尾的逗号/顿号+可选空格+数字（触发器格式）
+  input = input.replace(/[,，]\s*\d+$/, '').trim();
+  // 再去掉末尾单独的逗号/顿号（用户只输入了逗号还没输数字）
+  input = input.replace(/[,，]$/, '').trim();
+  return input;
+}
+
+// 【修复2】检测输入类型（统一入口，内部自动清理逗号触发器）
+function detectInputType(rawInput) {
+  let input = extractEffectiveInput(rawInput);
+
+  if (input === '' || input === ',' || input === '，') {
+    return { type: 'empty', category: '系统检查', description: '空输入 - 显示系统检查功能' };
+  }
+
+  // 文件路径（/ 开头）- 优先级最高
+  if (/^\//.test(input) || /^~\//.test(input) || /^\.\//.test(input)) {
+    return { type: 'file', category: '文件', description: '文件路径' };
+  }
+
+  // 网址（https:// 开头）
+  if (/^https?:\/\//.test(input)) {
+    return { type: 'url', category: '网址', description: '网址' };
+  }
+
+  // 完整 IP（数字.数字.数字.数字）
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(input)) {
+    return { type: 'ip', category: 'IP/域名', description: 'IP地址' };
+  }
+
+  // IP 地址（部分输入，如 127.0.0）- 修复：必须至少含一个点，纯数字不匹配
+  if (/^\d{1,3}(\.\d{1,3}){1,3}\.?$/.test(input)) {
+    return { type: 'ip', category: 'IP/域名', description: 'IP地址' };
+  }
+
+  // 域名（字符串.字符串，如 baidu.com）
+  if (/^[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}$/.test(input)) {
+    return { type: 'domain', category: 'IP/域名', description: '域名' };
+  }
+
+  return { type: 'unknown', category: '未知', description: '未知类型' };
+}
+
+// 优化：将 allFunctions 提为模块级常量，避免每次调用重建
+const ALL_FUNCTIONS = {
+  '系统检查': [
+    { code: 'LQ0000', name: '进程监控', number: 1, desc: '查看系统进程信息' },
+    { code: 'LQ0001', name: '网络连接', number: 2, desc: '查看网络连接状态' },
+    { code: 'LQ0002', name: '防火墙配置', number: 3, desc: '查看防火墙规则' },
+    { code: 'LQ0003', name: '网络协议', number: 4, desc: '查看网络协议统计' },
+    { code: 'LQ0004', name: '系统服务', number: 5, desc: '查看系统服务状态' },
+    { code: 'LQ0005', name: '端口占用', number: 6, desc: '查看端口占用情况' },
+    { code: 'LQ0006', name: '系统信息', number: 7, desc: '查看系统基本信息' },
+    { code: 'LQ0007', name: '用户账户', number: 8, desc: '查看用户账户信息' },
+    { code: 'LQ0008', name: '定时任务', number: 9, desc: '查看定时任务配置' },
+    { code: 'LQ0009', name: '环境变量', number: 10, desc: '查看环境变量' },
+  ],
+  'IP/域名': [
+    { code: 'LQ0010', name: '端口扫描', number: 1, desc: '扫描目标端口' },
+    { code: 'LQ0011', name: '网络连接', number: 2, desc: '测试网络连接' },
+    { code: 'LQ0012', name: 'HTTP状态检查', number: 3, desc: '检查HTTP响应状态' },
+    { code: 'LQ0013', name: '子域名枚举', number: 4, desc: '枚举子域名' },
+    { code: 'LQ0014', name: '目录爆破', number: 5, desc: '爆破Web目录' },
+    { code: 'LQ0015', name: 'Whois查询', number: 6, desc: '查询Whois信息' },
+    { code: 'LQ0016', name: 'DNS解析', number: 7, desc: 'DNS解析查询' },
+    { code: 'LQ0017', name: 'Traceroute', number: 8, desc: '路由追踪' },
+  ],
+  '网址': [
+    { code: 'LQ0018', name: 'HTTP状态检查', number: 1, desc: '检查HTTP响应状态' },
+    { code: 'LQ0019', name: '目录爆破', number: 2, desc: '爆破Web目录' },
+    { code: 'LQ0020', name: '子域名枚举', number: 3, desc: '枚举子域名' },
+    { code: 'LQ0021', name: '网页截图', number: 4, desc: '网页截图' },
+    { code: 'LQ0022', name: 'SSL证书检查', number: 5, desc: '检查SSL证书' },
+    { code: 'LQ0023', name: '响应头分析', number: 6, desc: '分析HTTP响应头' },
+    { code: 'LQ0024', name: '网页内容抓取', number: 7, desc: '抓取网页内容' },
+  ],
+  '文件': [
+    { code: 'LQ0025', name: '文件哈希', number: 1, desc: '计算文件哈希值' },
+    { code: 'LQ0026', name: '日志分析', number: 2, desc: '分析日志文件' },
+    { code: 'LQ0027', name: '配置检查', number: 3, desc: '检查配置文件' },
+    { code: 'LQ0028', name: '文件信息', number: 4, desc: '查看文件信息' },
+    { code: 'LQ0029', name: '文件权限', number: 5, desc: '查看文件权限' },
+    { code: 'LQ0030', name: '文件类型识别', number: 6, desc: '识别文件类型' },
+  ],
+  '未知': []
+};
+
+// 获取功能列表
+function getFunctionsByCategory(category) {
+  return ALL_FUNCTIONS[category] || [];
+}
+
+// ==================== 【修复3】自动判断（实时） ====================
+// 核心修复：无论输入什么，都基于"有效输入"（去掉逗号触发器后）来判断
+function handleInputAuto() {
+  const rawValue = document.getElementById('mainInput').value;
+  const inputType = detectInputType(rawValue);
+
+  updateRecognitionBadge(inputType);
+
+  const functions = getFunctionsByCategory(inputType.category);
+  currentFunctions = functions;
+  currentCategory = inputType.category;
+  renderFunctions(functions);
+}
+
+// 优化：防抖版本，避免每次按键全量重渲染
+const debouncedHandleInput = debounce(handleInputAuto, 200);
+
+// ==================== 【修复4】回车触发 ====================
+function handleInputKey(event) {
+  if (event.key !== 'Enter') return;
+
+  const rawValue = document.getElementById('mainInput').value;
+  const trimmed = rawValue.trim();
+
+  // 空输入处理
+  if (trimmed === '' || trimmed === ',' || trimmed === '，') {
+    updateRecognitionBadge({type: 'empty', category: '系统检查', description: '空输入'});
+    const functions = getFunctionsByCategory('系统检查');
+    currentFunctions = functions;
+    currentCategory = '系统检查';
+    renderFunctions(functions);
+    document.getElementById('mainInput').value = '';
+    return;
+  }
+
+  // 【修复5】检查逗号+数字触发器（支持可选空格：,1 或 , 1）
+  const triggerMatch = rawValue.match(/[,，]\s*(\d+)$/);
+  if (triggerMatch) {
+    const funcNum = parseInt(triggerMatch[1]);
+    let cleanInput = extractEffectiveInput(rawValue);
+
+    // 【关键修复】如果cleanInput为空（用户只输入了",数字"），
+    // 则使用上一次有效的输入，或保持当前类别不变
+    let inputType;
+    let functions;
+    if (cleanInput === '' || cleanInput === ',' || cleanInput === '，') {
+      // 使用当前已识别的类别，不重新识别
+      inputType = {type: currentCategory === '系统检查' ? 'empty' : currentCategory.toLowerCase(), category: currentCategory, description: currentCategory};
+      functions = currentFunctions;
+    } else {
+      // 正常识别
+      inputType = detectInputType(cleanInput);
+      functions = getFunctionsByCategory(inputType.category);
+      currentFunctions = functions;
+      currentCategory = inputType.category;
+    }
+
+    updateRecognitionBadge(inputType);
+    renderFunctions(functions);
+
+    // 【修复6】执行对应功能（funcNum是1-based），增加越界保护
+    if (functions.length > 0 && funcNum >= 1 && funcNum <= functions.length) {
+      const targetFunc = functions[funcNum - 1];
+      executeFunction(targetFunc.code, cleanInput);
+    } else if (funcNum > functions.length) {
+      // 序号越界，给出友好提示
+      showResultPanel('执行结果', 
+        `功能序号 ${funcNum} 超出范围\n` +
+        `当前类别「${currentCategory}」共有 ${functions.length} 个功能\n` +
+        `请输入 1-${functions.length} 之间的数字`, false);
+    }
+
+    // 保留cleanInput在输入框中
+    document.getElementById('mainInput').value = cleanInput;
+    return;
+  }
+}
+
+function updateRecognitionBadge(type) {
+  const area = document.getElementById('recognitionArea');
+  if (type.type === 'unknown') {
+    area.innerHTML = `<div class="recognition-badge">&#x26A0; 无法识别输入类型</div>`;
+    return;
+  }
+
+  const iconMap = {
+    'empty': '&#x1F4BB;', 'ip': '&#x1F310;', 'domain': '&#x1F310;', 
+    'url': '&#x1F517;', 'file': '&#x1F4C1;'
+  };
+
+  const funcCount = getFunctionsByCategory(type.category).length;
+  area.innerHTML = `
+    <div class="recognition-badge">
+      ${iconMap[type.type] || '&#x1F4CC;'} 
+      已识别：${type.category} 共${funcCount}个功能
+    </div>
+  `;
+}
+
+function renderFunctions(functions) {
+  const area = document.getElementById('functionsArea');
+  if (functions.length === 0) {
+    area.innerHTML = '';
+    return;
+  }
+
+  function getColorClass(name) {
+    if (name.includes('用户账户')) return 'color-user';
+    if (name.includes('网络连接')) return 'color-network';
+    if (name.includes('防火墙配置')) return 'color-firewall';
+    if (name.includes('定时任务')) return 'color-cron';
+    if (name.includes('环境变量')) return 'color-env';
+    if (name.includes('网络协议')) return 'color-protocol';
+    if (name.includes('系统服务')) return 'color-service';
+    if (name.includes('端口占用')) return 'color-port';
+    return '';
+  }
+
+  function formatNumber(code) {
+    const m = code.match(/LQ(\d+)/);
+    if (m) return 'L' + m[1].padStart(4, '0');
+    return code;
+  }
+
+  area.innerHTML = `
+    <div class="functions-grid">
+      ${functions.map(f => `
+        <div class="function-card" onclick="executeFunction('${f.code}', extractEffectiveInput(document.getElementById('mainInput').value))">
+          <div class="function-card-header">
+            <div class="function-name ${getColorClass(f.name)}">${f.name}</div>
+            <div class="function-number">${formatNumber(f.code)}</div>
+          </div>
+          <div class="function-desc">${f.desc}</div>
+          <div class="function-code">${f.code}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ==================== 功能执行 ====================
+async function executeFunction(code, input) {
+  const area = document.getElementById('resultArea');
+  area.innerHTML = `
+    <div class="result-panel">
+      <div class="result-header">
+        <div class="result-title">&#x1F4E3; 执行结果</div>
+        <button class="result-close" onclick="closeResult()">&#x2715;</button>
+      </div>
+      <div class="result-body">
+        <div class="result-status" style="color:var(--info)">
+          &#x23F3; 执行中... [${code}]
+        </div>
+      </div>
+    </div>
+  `;
+
+  try {
+    const result = await window.go.main.App.ExecuteFunction(code, input || '');
+
+    if (result.needRoot) {
+      showRootRequiredHint(code, result.rootMsg);
+      return;
+    }
+
+    const statusClass = result.success ? 'success' : 'error';
+    const statusIcon = result.success ? '&#x2705;' : '&#x274C;';
+    const statusText = result.success ? '执行成功' : '执行失败';
+
+    area.innerHTML = `
+      <div class="result-panel">
+        <div class="result-header">
+          <div class="result-title">&#x1F4E3; 执行结果</div>
+          <button class="result-close" onclick="closeResult()">&#x2715;</button>
+        </div>
+        <div class="result-body">
+          <div class="result-status ${statusClass}">
+            ${statusIcon} ${statusText} [${escapeHtml(code)}] - ${escapeHtml(result.timestamp)}
+          </div>
+          ${result.error ? `<div style="color:var(--danger);margin-bottom:10px;">错误: ${escapeHtml(result.error)}</div>` : ''}
+          <div class="result-output">${escapeHtml(result.output || '无输出')}</div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    area.innerHTML = `
+      <div class="result-panel">
+        <div class="result-header">
+          <div class="result-title">&#x1F4E3; 执行结果</div>
+          <button class="result-close" onclick="closeResult()">&#x2715;</button>
+        </div>
+        <div class="result-body">
+          <div class="result-status error">&#x274C; 执行异常: ${escapeHtml(err.message)}</div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+// 【新增】通用结果展示函数
+function showResultPanel(title, message, isError) {
+  const area = document.getElementById('resultArea');
+  const statusClass = isError ? 'error' : 'success';
+  const statusIcon = isError ? '&#x274C;' : '&#x2705;';
+  area.innerHTML = `
+    <div class="result-panel">
+      <div class="result-header">
+        <div class="result-title">&#x1F4E3; ${title}</div>
+        <button class="result-close" onclick="closeResult()">&#x2715;</button>
+      </div>
+      <div class="result-body">
+        <div class="result-status ${statusClass}">${statusIcon} ${message}</div>
+      </div>
+    </div>
+  `;
+}
+
+function showRootRequiredHint(code, msg) {
+  const area = document.getElementById('resultArea');
+  area.innerHTML = `
+    <div class="result-panel">
+      <div class="result-header">
+        <div class="result-title">&#x1F4E3; 执行结果</div>
+        <button class="result-close" onclick="closeResult()">&#x2715;</button>
+      </div>
+      <div class="result-body">
+        <div class="result-status error">&#x274C; 权限不足 [${code}]</div>
+        <div style="color:var(--text-secondary);margin:12px 0;line-height:1.6;">
+          ${escapeHtml(msg || '该功能需要root权限才能执行。')}
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="action-btn primary" onclick="showRootGrantModal();closeResult();">
+            <span>&#x1F510;</span> 赋予权限
+          </button>
+          <button class="action-btn" onclick="closeResult()">
+            <span>&#x2715;</span> 取消
+          </button>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">
+          需要root权限的功能：防火墙配置、端口占用、定时任务、端口扫描、Traceroute、配置检查
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function closeResult() {
+  document.getElementById('resultArea').innerHTML = '';
+}
+
+// ==================== 文件选择 ====================
+async function selectFile() {
+  try {
+    const path = await window.go.main.App.OpenFileDialog();
+    if (path) {
+      document.getElementById('mainInput').value = path;
+      handleInputAuto();
+    }
+  } catch (e) {
+    console.error('文件选择失败:', e);
+  }
+}
+
+async function selectDirectory() {
+  try {
+    const path = await window.go.main.App.OpenDirectoryDialog();
+    if (path) {
+      document.getElementById('mainInput').value = path;
+      handleInputAuto();
+    }
+  } catch (e) {
+    console.error('文件夹选择失败:', e);
+  }
+}
+
+// ==================== 权限赋予弹窗 ====================
+function showRootGrantModal() {
+  document.getElementById('rootGrantModal').classList.add('show');
+  document.getElementById('modalError').classList.remove('show');
+  document.getElementById('rootPasswordInput').value = '';
+}
+
+function hideRootGrantModal() {
+  document.getElementById('rootGrantModal').classList.remove('show');
+}
+
+async function submitRootPassword() {
+  const password = document.getElementById('rootPasswordInput').value;
+  if (!password) return;
+
+  try {
+    const success = await window.go.main.App.SetRootPassword(password);
+    if (success) {
+      rootPasswordSet = true;
+      hideRootGrantModal();
+      updateRootGrantUI();
+    } else {
+      document.getElementById('modalError').classList.add('show');
+    }
+  } catch (e) {
+    document.getElementById('modalError').classList.add('show');
+  }
+}
+
+function updateRootGrantUI() {
+  const btn = document.getElementById('grantRootBtn');
+  const hint = document.getElementById('rootGrantHint');
+  if (btn) {
+    btn.classList.add('granted');
+    btn.innerHTML = '<span>&#x2705;</span> 已赋予权限';
+    btn.onclick = null;
+    btn.style.cursor = 'default';
+  }
+  if (hint) {
+    hint.style.borderColor = 'rgba(34,197,94,0.3)';
+    hint.style.background = 'rgba(34,197,94,0.1)';
+  }
+
+  const infoBtn = document.getElementById('infoGrantBtn');
+  if (infoBtn) {
+    infoBtn.classList.add('granted');
+    infoBtn.innerHTML = '<span>&#x2705;</span> 已赋予权限';
+    infoBtn.onclick = null;
+    infoBtn.style.cursor = 'default';
+    infoBtn.style.background = 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))';
+    infoBtn.style.borderColor = 'rgba(34,197,94,0.3)';
+    infoBtn.style.color = 'var(--success)';
+  }
+}
+
+// ==================== 容器状态输入框处理 ====================
+function handleContainerStatusKey(event) {
+  if (event.key !== 'Enter') return;
+
+  const rawValue = document.getElementById('containerStatusInput').value.trim();
+  if (!rawValue) {
+    if (lastScanResult) {
+      renderContainerGrid(lastScanResult.processes);
+    }
+    return;
+  }
+
+  // 逗号+数字触发器 - 对应容器卡片序号（支持中英文逗号）
+  const triggerMatch = rawValue.match(/[,，]\s*(\d+)$/);
+  if (triggerMatch && lastScanResult) {
+    const cardNum = parseInt(triggerMatch[1]);
+    const cleanInput = rawValue.replace(/[,，]\s*\d+$/, '').trim();
+
+    const sorted = getSortedContainers(lastScanResult.processes);
+    if (cardNum > 0 && cardNum <= sorted.length) {
+      showContainerDetail(sorted[cardNum - 1]);
+    } else {
+      showResultPanel('容器详情', `序号 ${cardNum} 超出范围，共有 ${sorted.length} 个容器`, true);
+    }
+    document.getElementById('containerStatusInput').value = cleanInput;
+    return;
+  }
+
+  // 状态筛选
+  if (lastScanResult) {
+    const filtered = lastScanResult.processes.filter(p => {
+      const statusText = p.status === 'running' ? '运行中' : '已停止';
+      const riskText = p.riskLevel || '';
+      const nameText = p.name || '';
+      const pidText = p.PID ? p.PID.toString() : '';
+      return statusText.includes(rawValue) || 
+             riskText.includes(rawValue) || 
+             nameText.toLowerCase().includes(rawValue.toLowerCase()) ||
+             pidText.includes(rawValue);
+    });
+    renderContainerGrid(filtered);
+  }
+}
+
+function getSortedContainers(processes) {
+  const priority = { '严重': 0, '高危': 1, '中危': 2, '低危': 3, '安全': 4, '已停止': 5 };
+  return [...processes].sort((a, b) => {
+    const pa = priority[a.riskLevel] !== undefined ? priority[a.riskLevel] : 5;
+    const pb = priority[b.riskLevel] !== undefined ? priority[b.riskLevel] : 5;
+    if (pa !== pb) return pa - pb;
+    return b.riskScore - a.riskScore;
+  });
+}
+
+// ==================== 41项 Linux CAP 权限定义 ====================
+const ALL_CAPS_41 = [
+  { name: 'CAP_CHOWN', dangerous: false },
+  { name: 'CAP_DAC_OVERRIDE', dangerous: false },
+  { name: 'CAP_DAC_READ_SEARCH', dangerous: true },
+  { name: 'CAP_FOWNER', dangerous: false },
+  { name: 'CAP_FSETID', dangerous: false },
+  { name: 'CAP_KILL', dangerous: false },
+  { name: 'CAP_SETGID', dangerous: false },
+  { name: 'CAP_SETUID', dangerous: false },
+  { name: 'CAP_SETPCAP', dangerous: false },
+  { name: 'CAP_LINUX_IMMUTABLE', dangerous: true },
+  { name: 'CAP_NET_BIND_SERVICE', dangerous: false },
+  { name: 'CAP_NET_BROADCAST', dangerous: true },
+  { name: 'CAP_NET_ADMIN', dangerous: true },
+  { name: 'CAP_NET_RAW', dangerous: false },
+  { name: 'CAP_IPC_LOCK', dangerous: false },
+  { name: 'CAP_IPC_OWNER', dangerous: true },
+  { name: 'CAP_SYS_MODULE', dangerous: true },
+  { name: 'CAP_SYS_RAWIO', dangerous: true },
+  { name: 'CAP_SYS_CHROOT', dangerous: false },
+  { name: 'CAP_SYS_PTRACE', dangerous: true },
+  { name: 'CAP_SYS_PACCT', dangerous: false },
+  { name: 'CAP_SYS_ADMIN', dangerous: true },
+  { name: 'CAP_SYS_BOOT', dangerous: true },
+  { name: 'CAP_SYS_NICE', dangerous: false },
+  { name: 'CAP_SYS_RESOURCE', dangerous: true },
+  { name: 'CAP_SYS_TIME', dangerous: true },
+  { name: 'CAP_SYS_TTY_CONFIG', dangerous: false },
+  { name: 'CAP_MKNOD', dangerous: false },
+  { name: 'CAP_LEASE', dangerous: false },
+  { name: 'CAP_AUDIT_WRITE', dangerous: false },
+  { name: 'CAP_AUDIT_CONTROL', dangerous: false },
+  { name: 'CAP_SETFCAP', dangerous: false },
+  { name: 'CAP_MAC_OVERRIDE', dangerous: true },
+  { name: 'CAP_MAC_ADMIN', dangerous: true },
+  { name: 'CAP_SYSLOG', dangerous: false },
+  { name: 'CAP_WAKE_ALARM', dangerous: false },
+  { name: 'CAP_BLOCK_SUSPEND', dangerous: false },
+  { name: 'CAP_AUDIT_READ', dangerous: false },
+  { name: 'CAP_PERFMON', dangerous: true },
+  { name: 'CAP_BPF', dangerous: true },
+  { name: 'CAP_CHECKPOINT_RESTORE', dangerous: true }
+];
+
+function showContainerDetail(container) {
+  // 设置当前详情ID，用于异步竞态守卫
+  currentDetailId = container.id || container.shortId || container.containerId || (container.PID ? `pid-${container.PID}` : null);
+
+  // ===== 1. 顶部：名称、ID、类型、状态 =====
+  document.getElementById('cdContainerName').textContent = container.name || '-';
+  const rawId = container.id || container.shortId || container.containerId || (container.PID ? `pid-${container.PID}` : '-');
+  // 显示完整ID
+  document.getElementById('cdContainerId').textContent = rawId;
+  document.getElementById('cdContainerType').textContent = container.containerType || container.type || 'docker';
+
+  const statusBadge = document.getElementById('cdStatusBadge');
+  const isRunning = container.status === 'running';
+  
+  // 只设置名字旁边的状态标签
+  if (statusBadge) {
+    statusBadge.textContent = isRunning ? '运行中' : '已停止';
+    statusBadge.className = 'cd-status-badge ' + (isRunning ? 'running' : 'stopped');
+  }
+
+  // ===== 2. 评分和等级 =====
+  // 后端返回的 SecurityScore 是风险分 (0-100, 越高越危险)
+  let scoreNum = 0;
+
+  if (container.securityScore !== undefined && container.securityScore !== null && container.securityScore !== '') {
+    scoreNum = Math.max(0, Math.min(100, parseFloat(container.securityScore) || 0));
+  } else if (container.riskScore !== undefined && container.riskScore !== null) {
+    scoreNum = Math.max(0, Math.min(100, parseFloat(container.riskScore) || 0));
+  }
+
+  // 五档分数颜色（风险分）：0-20绿 21-40黄 41-60橙 61-80红 81-100深红+闪
+  function getScoreClass(s) {
+    if (s <= 20) return 'score-s1';
+    if (s <= 40) return 'score-s2';
+    if (s <= 60) return 'score-s3';
+    if (s <= 80) return 'score-s4';
+    return 'score-s5';
+  }
+  function getLevelClass(s) {
+    if (s <= 20) return 'level-s1';
+    if (s <= 40) return 'level-s2';
+    if (s <= 60) return 'level-s3';
+    if (s <= 80) return 'level-s4';
+    return 'level-s5';
+  }
+  function getLevelText(s) {
+    if (s <= 20) return '安全';
+    if (s <= 40) return '低危';
+    if (s <= 60) return '中危';
+    if (s <= 80) return '高危';
+    return '严重';
+  }
+  let scoreClass = getScoreClass(scoreNum);
+
+  // 等级判断 - 优先用容器自带字段，否则用分数五档
+  let levelText = container.riskLevel || '-';
+  let levelClass = getLevelClass(scoreNum);
+  const levelMapHighest = ['严重','CRITICAL','极高'];
+  const levelMapHigh = ['高危','HIGH'];
+  const levelMapMedium = ['中危','MEDIUM'];
+  const levelMapLow = ['低危','LOW'];
+  if (levelMapHighest.includes(levelText)) { levelText = '严重'; levelClass = 'level-s5'; }
+  else if (levelMapHigh.includes(levelText)) { levelText = '高危'; levelClass = 'level-s4'; }
+  else if (levelMapMedium.includes(levelText)) { levelText = '中危'; levelClass = 'level-s3'; }
+  else if (levelMapLow.includes(levelText)) { levelText = '低危'; levelClass = 'level-s2'; }
+  else if (levelText === '安全' || levelText === 'SAFE') { levelText = '安全'; levelClass = 'level-s1'; }
+  else if (levelText === '已停止' || levelText === 'STOPPED') { levelText = '已停止'; levelClass = 'level-s2'; }
+  else {
+    levelText = getLevelText(scoreNum);
+  }
+  // 已停止容器显示灰色，分数为0（安全）
+  if (!isRunning) {
+    levelText = '已停止';
+    levelClass = 'level-s1';
+    scoreClass = 'score-s1';
+    scoreNum = 0;
+  }
+
+  // ===== 3. 风险标记（右栏） =====
+  // 优先使用 riskFlags，兼容 flags 和风险代号
+  let tags = [];
+  if (Array.isArray(container.riskFlags)) tags = container.riskFlags;
+  else if (Array.isArray(container.flags)) tags = container.flags;
+
+  // 如果没有，根据 innerInfo / riskLevel 自动生成一些标签作为兜底
+  const fallbackTags = [];
+  // 修复：levelClass 取值范围是 level-s1~level-s5，原条件 'level-high' 永远为 false
+  if ((levelClass === 'level-s4' || levelClass === 'level-s5') && tags.length === 0) {
+    fallbackTags.push({ text: '综合风险较高', cls: 'danger', icon: '\u{26A0}' });
+    fallbackTags.push({ text: '建议立即加固', cls: 'warning', icon: '\u{1F4CC}' });
+  }
+  if (container.status !== 'running' && tags.length === 0) {
+    fallbackTags.push({ text: '容器未运行', cls: 'info', icon: '\u{23F8}' });
+  }
+  const tagsHtml = tags.length > 0
+    ? tags.map(f => {
+        let cls = '';
+        const fText = String(f);
+        if (/高危|严重|root|特权|可写/i.test(fText)) cls = '';
+        else if (/警告|建议|中危/i.test(fText)) cls = 'warning-tag';
+        else cls = 'info-tag';
+        const icon = /高危|严重|危险/i.test(fText) ? '\u{1F534}' : /警告|建议/i.test(fText) ? '\u{1F7E1}' : '\u{2139}\u{FE0F}';
+        return `<div class="cd-risk-tag ${cls}"><span class="tag-icon">${icon}</span><span>${escapeHtml(fText)}</span></div>`;
+      }).join('')
+    : fallbackTags.map(t => `<div class="cd-risk-tag ${t.cls === 'warning' ? 'warning-tag' : t.cls === 'info' ? 'info-tag' : ''}"><span class="tag-icon">${t.icon}</span><span>${escapeHtml(t.text)}</span></div>`).join('');
+  const tagsAreaHtml = (tags.length === 0 && fallbackTags.length === 0)
+    ? `<div class="cd-empty-tags">\u{2705} 未发现明显风险标记</div>`
+    : `<div class="cd-tags-area">${tagsHtml}</div>`;
+
+  // ===== 4. 基本信息（中栏） =====
+  const imageVal = container.image || container.imageName || container.Image || '-';
+  const userVal = container.user || container.User || '-';
+  const pidVal = container.PID || container.pid || container.Pid || 'N/A';
+  const createdVal = container.created || container.Created || '-';
+  const infoListHtml = `
+    <div class="cd-info-list">
+      <div class="cd-info-row">
+        <div class="cd-info-icon">\u{1F5BC}\u{FE0F}</div>
+        <div class="cd-info-body">
+          <span class="cd-info-label">镜像</span>
+          <span class="cd-info-value image-val" title="${escapeHtml(imageVal)}">${escapeHtml(imageVal)}</span>
+        </div>
+      </div>
+      <div class="cd-info-row">
+        <div class="cd-info-icon">\u{1F464}</div>
+        <div class="cd-info-body">
+          <span class="cd-info-label">运行用户</span>
+          <span class="cd-info-value">${escapeHtml(userVal)}</span>
+        </div>
+      </div>
+      <div class="cd-info-row">
+        <div class="cd-info-icon">\u{1F39B}\u{FE0F}</div>
+        <div class="cd-info-body">
+          <span class="cd-info-label">PID</span>
+          <span class="cd-info-value">${escapeHtml(pidVal)}</span>
+        </div>
+      </div>
+      <div class="cd-info-row">
+        <div class="cd-info-icon">\u{1F552}</div>
+        <div class="cd-info-body">
+          <span class="cd-info-label">创建时间</span>
+          <span class="cd-info-value">${escapeHtml(createdVal)}</span>
+        </div>
+      </div>
+      <div class="cd-info-row">
+        <div class="cd-info-icon">${isRunning ? '\u{1F7E2}' : '\u{26AA}'}</div>
+        <div class="cd-info-body">
+          <span class="cd-info-label">状态</span>
+          <span class="cd-info-value ${isRunning ? 'running-val' : 'stopped-val'}">${isRunning ? '运行中' : '已停止'}</span>
+        </div>
+      </div>
+      <div class="cd-info-row">
+        <div class="cd-info-icon">\u{1F194}</div>
+        <div class="cd-info-body">
+          <span class="cd-info-label">容器完整ID</span>
+          <span class="cd-info-value" title="${escapeHtml(rawId)}">${typeof rawId === 'string' && rawId.length > 16 ? escapeHtml(rawId.substring(0,16)) + '...' : escapeHtml(rawId)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // ===== 5. 41项 CAP 权限网格 =====
+  // 支持多种后端字段：
+  //  - permissions: [{name, has, dangerous}]  (ContainerDetailResult 原生)
+  //  - capAdd: ["SYS_ADMIN", ...]  (已添加的 caps，其余默认docker拥有)
+  //  - caps / capabilities / capList / capBounded
+  let ownedCaps = [];
+  let dangerousOverride = new Map(); // name -> dangerous bool，优先用后端标记
+
+  if (Array.isArray(container.permissions) && container.permissions.length > 0) {
+    // 优先使用 ContainerDetailResult 的全量权限状态
+    container.permissions.forEach(p => {
+      if (p && p.has) ownedCaps.push(p.name || p.Name || '');
+      if (p && (p.name || p.Name)) {
+        const n = String(p.name || p.Name).trim().toUpperCase();
+        dangerousOverride.set(n, !!p.dangerous);
+        dangerousOverride.set(n.replace(/^CAP_/, ''), !!p.dangerous);
+      }
+    });
+  } else {
+    if (Array.isArray(container.caps)) ownedCaps = container.caps;
+    else if (Array.isArray(container.capabilities)) ownedCaps = container.capabilities;
+    else if (Array.isArray(container.capList)) ownedCaps = container.capList;
+    else if (Array.isArray(container.capBounded)) ownedCaps = container.capBounded;
+    else if (Array.isArray(container.capAdd)) {
+      // Docker 默认容器已有一组基础 cap，capAdd 是额外添加的
+      // 这里先以 capAdd 为"已拥有"的基准
+      ownedCaps = container.capAdd;
+    }
+    // 兼容字符串形式（逗号或空格分隔）
+    if (ownedCaps.length === 0 && typeof container.caps === 'string') {
+      ownedCaps = container.caps.split(/[,;\s]+/).filter(Boolean);
+    }
+    if (ownedCaps.length === 0 && typeof container.capabilities === 'string') {
+      ownedCaps = container.capabilities.split(/[,;\s]+/).filter(Boolean);
+    }
+  }
+  // 统一转大写并补 CAP_ 前缀
+  const ownedCapSet = new Set(ownedCaps.map(c => {
+    let s = String(c || '').trim().toUpperCase();
+    if (!s) return '';
+    if (!s.startsWith('CAP_')) s = 'CAP_' + s;
+    return s;
+  }).filter(Boolean));
+
+  let ownedCount = 0;
+  const capGridHtml = ALL_CAPS_41.map(def => {
+    // 是否高危：优先后端 permissions[i].dangerous，其次用前端内置 dangerous
+    const keyFull = def.name;
+    const keyShort = def.name.replace(/^CAP_/, '');
+    const isDanger = dangerousOverride.has(keyFull)
+      ? dangerousOverride.get(keyFull)
+      : (dangerousOverride.has(keyShort) ? dangerousOverride.get(keyShort) : def.dangerous);
+
+    const has = ownedCapSet.has(keyFull) || ownedCapSet.has(keyShort);
+    if (has) ownedCount++;
+    const stateClass = has ? 'cap-ok' : 'cap-no';
+    const dangerClass = (isDanger && has) ? 'cap-danger' : '';
+    const dangerMark = (isDanger && has) ? '<span class="cd-cap-danger-mark"></span>' : '';
+    const iconText = has ? '\u{2713}' : '\u{25CB}';
+    return `
+      <div class="cd-cap-item ${stateClass} ${dangerClass}" title="${def.name}${isDanger ? ' (高危权限)' : ''}">
+        ${dangerMark}
+        <span class="cd-cap-icon">${iconText}</span>
+        <span class="cd-cap-name">${def.name.replace(/^CAP_/, '')}</span>
+      </div>
+    `;
+  }).join('');
+
+  // ===== 6. 端口映射 =====
+  // ContainerDetailResult.ports 是字符串数组：["0.0.0.0:8080 -> 80/tcp", ...]
+  // 也兼容对象数组、对象映射对象
+  let portList = [];
+  if (Array.isArray(container.ports)) portList = container.ports;
+  else if (Array.isArray(container.portMappings)) portList = container.portMappings;
+  else if (Array.isArray(container.PortBindings)) portList = container.PortBindings;
+  // 兼容 object 形式：{ "80/tcp": [{HostIp:"", HostPort:"8080"}] }
+  if (portList.length === 0 && container.ports && typeof container.ports === 'object' && !Array.isArray(container.ports)) {
+    Object.entries(container.ports).forEach(([k, v]) => {
+      if (Array.isArray(v)) v.forEach(b => portList.push({ hostPort: b.HostPort, containerPort: k.split('/')[0], protocol: k.split('/')[1] || 'tcp', hostIp: b.HostIp }));
+      else portList.push({ hostPort: '-', containerPort: k.split('/')[0], protocol: k.split('/')[1] || 'tcp' });
+    });
+  }
+  const portsHtml = portList.length === 0
+    ? `<div class="cd-list-empty">无端口映射配置</div>`
+    : portList.map(p => {
+        // 字符串解析：支持 "hostIp:hostPort -> containerPort/protocol" 格式
+        if (typeof p === 'string') {
+          const s = p;
+          const m = s.match(/^(.*?):(\d+)\s*(?:->|=>|:)\s*(\d+)(?:\/(\w+))?$/);
+          if (m) {
+            const hostIp = m[1] || '0.0.0.0';
+            const hostPort = m[2];
+            const contPort = m[3];
+            const proto = (m[4] || 'tcp').toLowerCase();
+            return `
+              <div class="cd-list-row">
+                <div class="cd-list-icon">\u{1F50C}</div>
+                <div class="cd-list-main">
+                  <span class="part-highlight">${hostIp}:${hostPort}</span>
+                  <span class="part-arrow">\u{25B6}</span>
+                  <span>容器端口 <span class="part-highlight">${contPort}</span> / ${proto.toUpperCase()}</span>
+                </div>
+              </div>
+            `;
+          }
+          return `
+            <div class="cd-list-row">
+              <div class="cd-list-icon">\u{1F50C}</div>
+              <div class="cd-list-main">${s}</div>
+            </div>
+          `;
+        }
+        const hostPort = p.hostPort || p.HostPort || p.host || '-';
+        const contPort = p.containerPort || p.ContainerPort || p.container || p.port || '-';
+        const proto = p.protocol || p.Protocol || p.type || 'tcp';
+        const hostIp = p.hostIp || p.HostIp || '0.0.0.0';
+        return `
+          <div class="cd-list-row">
+            <div class="cd-list-icon">\u{1F50C}</div>
+            <div class="cd-list-main">
+              <span class="part-highlight">${hostIp}:${hostPort}</span>
+              <span class="part-arrow">\u{25B6}</span>
+              <span>容器端口 <span class="part-highlight">${contPort}</span> / ${proto.toUpperCase()}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+  // ===== 7. 挂载卷 =====
+  // ContainerDetailResult.mounts 是字符串数组：["/host:/container[:rw|ro]", ...]
+  // 也兼容对象数组、binds 字符串数组
+  let mountList = [];
+  if (Array.isArray(container.mounts)) mountList = container.mounts;
+  else if (Array.isArray(container.volumes)) mountList = container.volumes;
+  else if (Array.isArray(container.Mounts)) mountList = container.Mounts;
+  if (mountList.length === 0 && Array.isArray(container.binds)) {
+    mountList = container.binds;
+  }
+  const mountsHtml = mountList.length === 0
+    ? `<div class="cd-list-empty">无挂载卷配置</div>`
+    : mountList.map(m => {
+        let src = '', dst = '', mode = '';
+        if (typeof m === 'string') {
+          // 支持 "/host:/container" 或 "/host:/container:rw"（注意 Windows C:\xxx 情况太复杂优先用前两段结合）
+          // 简化解析：从右向左找 mode 段，然后是 dst/src
+          const parts = m.split(':');
+          if (parts.length === 2) {
+            src = parts[0] || '';
+            dst = parts[1] || '';
+            mode = '';
+          } else if (parts.length >= 3) {
+            // 可能是 /host/path:/cont/path:rw；也可能是 Windows C:\host:C:\cont:rw
+            const maybeMode = parts[parts.length - 1];
+            if (/^(rw|ro|z|Z|shared|private|slave|rshared|rprivate|rslave|copy|nocopy)$/i.test(maybeMode)) {
+              mode = maybeMode;
+              // 去掉最后一段后再找 host 和 container（取第一段为 src，其余拼接为 dst 以防 dst 内部含冒号）
+              const rest = parts.slice(0, -1);
+              // 简单策略：最长前缀作为 src（首个含 / 开头或盘符的段开始连续拼接）
+              src = rest[0] || '';
+              dst = rest.slice(1).join(':') || '';
+            } else {
+              src = parts[0] || '';
+              dst = parts.slice(1).join(':') || '';
+            }
+          } else {
+            src = m; dst = '';
+          }
+        } else {
+          src = m.Source || m.source || m.host || m.from || '';
+          dst = m.Destination || m.destination || m.dest || m.target || m.container || '';
+          const rawMode = m.Mode || m.mode || '';
+          if (rawMode !== '') mode = rawMode;
+          else if (m.RW === false) mode = 'ro';
+          else if (m.RW === true) mode = 'rw';
+        }
+        const modeColor = /ro|readonly/i.test(String(mode)) ? '#60a5fa' : '';
+        return `
+          <div class="cd-list-row">
+            <div class="cd-list-icon">\u{1F4C1}</div>
+            <div class="cd-list-main">
+              <span class="part-highlight" title="${src}">${src.length > 30 ? '...' + src.substring(src.length - 30) : src}</span>
+              ${dst ? `<span class="part-arrow">\u{25B6}</span><span title="${dst}">${dst.length > 30 ? '...' + dst.substring(dst.length - 30) : dst}</span>` : ''}
+              ${mode ? ` <span style="color:${modeColor || '#ffaa00'};margin-left:6px;font-size:11px;padding:1px 6px;border:1px solid ${modeColor || 'rgba(255,170,0,0.3)'};border-radius:4px;background:${modeColor ? 'rgba(68,136,255,0.08)' : 'rgba(255,170,0,0.08)'};">${mode.toUpperCase()}</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+  // ===== 8. 组装滚动区内容 =====
+  const RING_R = 88;
+  const RING_C = 2 * Math.PI * RING_R;
+  const scrollHtml = `
+    <div class="cd-top-section">
+      <!-- 左：风险评分大卡片 -->
+      <div class="cd-card cd-score-card">
+        <div class="cyber-corner"></div>
+        <div class="cyber-corner-br"></div>
+        <div class="cyber-corner-tr"></div>
+        <div class="cyber-corner-bl"></div>
+        <div class="hud-side-mark"></div>
+        <div class="hud-status-dot"></div>
+        <div class="panel-index">SYS-01</div>
+        <div class="cd-card-title">RISK SCORE / 风险评分</div>
+        <div class="cd-score-ring-wrap">
+          <svg class="cd-score-ring-svg" viewBox="0 0 220 220">
+            <circle class="cd-score-ring-bg" cx="110" cy="110" r="${RING_R}"></circle>
+            <circle class="cd-score-ring-fill" id="cdScoreRing" cx="110" cy="110" r="${RING_R}"
+              stroke-dasharray="${RING_C}" stroke-dashoffset="${RING_C}" style="stroke-dashoffset: ${RING_C};"></circle>
+          </svg>
+          <div class="cd-score-ring-center">
+            <div class="cd-score-number ${scoreClass}" id="cdScoreNumber">0.0</div>
+            <div class="cd-score-slash">/100</div>
+          </div>
+        </div>
+        <div class="cd-score-bar-wrap">
+          <div class="cd-score-bar-bg">
+            <div class="cd-score-bar-fill" id="cdScoreBar" style="width:0%;"></div>
+          </div>
+        </div>
+        <div class="cd-risk-level-badge ${levelClass}">${levelText}</div>
+      </div>
+
+      <!-- 中：基本信息 -->
+      <div class="cd-card">
+        <div class="cyber-corner"></div>
+        <div class="cyber-corner-br"></div>
+        <div class="cyber-corner-tr"></div>
+        <div class="cyber-corner-bl"></div>
+        <div class="hud-side-mark"></div>
+        <div class="hud-status-dot"></div>
+        <div class="panel-index">SYS-02</div>
+        <div class="cd-card-title">CONTAINER INFO / 容器信息</div>
+        ${infoListHtml}
+      </div>
+
+      <!-- 右：风险代号/标签 -->
+      <div class="cd-card">
+        <div class="cyber-corner"></div>
+        <div class="cyber-corner-br"></div>
+        <div class="cyber-corner-tr"></div>
+        <div class="cyber-corner-bl"></div>
+        <div class="hud-side-mark"></div>
+        <div class="hud-status-dot"></div>
+        <div class="panel-index">SYS-03</div>
+        <div class="cd-card-title">RISK TAGS / 风险标记</div>
+        ${tagsAreaHtml}
+      </div>
+    </div>
+
+    <div class="cd-bottom-section">
+      <!-- 权限检查器 -->
+      <div class="cd-card">
+        <div class="cyber-corner"></div>
+        <div class="cyber-corner-br"></div>
+        <div class="cyber-corner-tr"></div>
+        <div class="cyber-corner-bl"></div>
+        <div class="hud-side-mark"></div>
+        <div class="hud-status-dot"></div>
+        <div class="panel-index">SYS-04</div>
+        <div class="cd-section-header">
+          <div class="cd-section-title">
+            <span class="title-icon">\u{1F510}</span>
+            容器权限检查器
+            <span class="count-badge">共 41 项 / 已拥有 ${ownedCount}</span>
+          </div>
+          <div class="cd-section-legend">
+            <div class="cd-legend-item"><span class="cd-legend-dot ok">\u{2713}</span> 已拥有</div>
+            <div class="cd-legend-item"><span class="cd-legend-dot no">\u{25CB}</span> 未拥有</div>
+            <div class="cd-legend-item"><span class="cd-legend-dot danger"></span> 高危权限</div>
+          </div>
+        </div>
+        <div class="cd-cap-grid">
+          ${capGridHtml}
+        </div>
+      </div>
+
+      <!-- 端口 / 挂载 -->
+      <div class="cd-bottom-cards">
+        <div class="cd-card cd-list-card">
+          <div class="cyber-corner"></div>
+          <div class="cyber-corner-br"></div>
+          <div class="cyber-corner-tr"></div>
+          <div class="cyber-corner-bl"></div>
+          <div class="hud-side-mark"></div>
+          <div class="hud-status-dot"></div>
+          <div class="panel-index">SYS-05</div>
+          <div class="cd-card-title">PORT MAPPINGS / 端口映射</div>
+          ${portsHtml}
+        </div>
+        <div class="cd-card cd-list-card">
+          <div class="cyber-corner"></div>
+          <div class="cyber-corner-br"></div>
+          <div class="cyber-corner-tr"></div>
+          <div class="cyber-corner-bl"></div>
+          <div class="hud-side-mark"></div>
+          <div class="hud-status-dot"></div>
+          <div class="panel-index">SYS-06</div>
+          <div class="cd-card-title">VOLUMES / 挂载卷</div>
+          ${mountsHtml}
+        </div>
+      </div>
+
+
+      <!-- 安全检查 (1-42静态 + 43-51动态) -->
+      <div class="cd-security-section" id="cdSecuritySection">
+        <div id="cdStaticSecurity"></div>
+        <div id="cdDynamicSecurity"></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('cdScrollArea').innerHTML = scrollHtml;
+  document.getElementById('cdScrollArea').scrollTop = 0;
+  document.getElementById('containerDetailOverlay').classList.add('show');
+
+  // 启动评分动画
+  setTimeout(() => {
+    animateScore(scoreNum);
+  }, 100);
+
+  // 渲染51项安全检查
+  renderSecurityChecks(container);
+
+  // ===== 9. 如果传入的是列表简略信息，尝试异步调用 Go 获取容器详情（caps/ports/mounts/permissions/image等） =====
+  const needDetail = !container.permissions
+    && !container.capAdd
+    && !(container.caps && container.caps.length)
+    && !(container.capabilities && container.capabilities.length)
+    && !(Array.isArray(container.ports) && container.ports.length > 0)
+    && !(Array.isArray(container.mounts) && container.mounts.length > 0)
+    && !container.image
+    && (container.id || container.ID || (container.PID ? String(container.PID) : null));
+
+  if (needDetail && window.go && window.go.main && window.go.main.App && typeof window.go.main.App.GetContainerDetail === 'function') {
+    const lookupId = container.id || container.ID || (container.PID ? String(container.PID) : null);
+    if (lookupId) {
+      // 显示 loading 标记
+      const grid = document.querySelector('#cdScrollArea .cd-cap-grid');
+      if (grid) {
+        grid.style.opacity = '0.6';
+        const badge = document.querySelector('#cdScrollArea .count-badge');
+        if (badge) badge.textContent = '加载中...';
+      }
+      const portCard = document.querySelector('#cdScrollArea .cd-bottom-cards .cd-list-card:nth-child(1) .cd-list-empty');
+      const mountCard = document.querySelector('#cdScrollArea .cd-bottom-cards .cd-list-card:nth-child(2) .cd-list-empty');
+      if (portCard) portCard.innerHTML = '<span style="color:#888888">正在查询端口映射...</span>';
+      if (mountCard) mountCard.innerHTML = '<span style="color:#888888">正在查询挂载卷...</span>';
+      // 镜像
+      const imgVal = document.querySelector('#cdScrollArea .cd-info-list .cd-info-row:nth-child(1) .cd-info-value');
+      if (imgVal && (!imgVal.textContent || imgVal.textContent === '-')) {
+        imgVal.textContent = '查询中...';
+        imgVal.style.color = '#888888';
+      }
+
+      (async () => {
+        try {
+          const detail = await window.go.main.App.GetContainerDetail(lookupId);
+          // 竞态守卫：如果用户已切换到其他容器，丢弃本次结果
+          if (!detail || currentDetailId !== lookupId || !document.getElementById('containerDetailOverlay').classList.contains('show')) return;
+
+          // 用详情对象覆盖部分字段，然后只重写需要重绘的部分 DOM
+          // 1) 补镜像到基本信息（只在原先是 '-' 时）
+          if (detail.image && imgVal && (imgVal.textContent === '-' || imgVal.textContent === '查询中...')) {
+            imgVal.textContent = detail.image;
+            imgVal.title = detail.image;
+            imgVal.style.color = '';
+            imgVal.classList.add('image-val');
+          }
+          if (detail.user) {
+            const userVal = document.querySelector('#cdScrollArea .cd-info-list .cd-info-row:nth-child(2) .cd-info-value');
+            if (userVal && (userVal.textContent === '-' || userVal.textContent === '')) {
+              userVal.textContent = detail.user;
+            }
+          }
+
+          // 2) 重绘 41 项 CAP（优先 permissions，其次 capAdd+drop）
+          // 构造一个 fake container 调用同一段逻辑
+          const mergedForCap = {
+            permissions: detail.permissions,
+            caps: container.caps,
+            capabilities: container.capabilities,
+            capAdd: detail.capAdd,
+            capBounded: container.capBounded
+          };
+          // 复用解析逻辑
+          let ownedCaps2 = [];
+          let dangerMap2 = new Map();
+          if (Array.isArray(mergedForCap.permissions) && mergedForCap.permissions.length > 0) {
+            mergedForCap.permissions.forEach(p => {
+              if (p && p.has) ownedCaps2.push(p.name || p.Name || '');
+              if (p && (p.name || p.Name)) {
+                const n = String(p.name || p.Name).trim().toUpperCase();
+                dangerMap2.set(n, !!p.dangerous);
+                dangerMap2.set(n.replace(/^CAP_/, ''), !!p.dangerous);
+              }
+            });
+          } else if (Array.isArray(mergedForCap.capAdd) && mergedForCap.capAdd.length > 0) {
+            ownedCaps2 = mergedForCap.capAdd;
+          }
+          const ownedSet2 = new Set(ownedCaps2.map(c => {
+            let s = String(c || '').trim().toUpperCase();
+            if (!s) return '';
+            if (!s.startsWith('CAP_')) s = 'CAP_' + s;
+            return s;
+          }).filter(Boolean));
+
+          let count2 = 0;
+          const newGridHtml = ALL_CAPS_41.map(def => {
+            const keyFull = def.name;
+            const keyShort = def.name.replace(/^CAP_/, '');
+            const isDanger = dangerMap2.has(keyFull) ? dangerMap2.get(keyFull)
+              : (dangerMap2.has(keyShort) ? dangerMap2.get(keyShort) : def.dangerous);
+            const has = ownedSet2.has(keyFull) || ownedSet2.has(keyShort);
+            if (has) count2++;
+            const stateClass = has ? 'cap-ok' : 'cap-no';
+            const dangerClass = (isDanger && has) ? 'cap-danger' : '';
+            const dangerMark2 = (isDanger && has) ? '<span class="cd-cap-danger-mark"></span>' : '';
+            const iconText = has ? '\u{2713}' : '\u{25CB}';
+            return `
+              <div class="cd-cap-item ${stateClass} ${dangerClass}" title="${def.name}${isDanger ? ' (高危权限)' : ''}">
+                ${dangerMark2}
+                <span class="cd-cap-icon">${iconText}</span>
+                <span class="cd-cap-name">${def.name.replace(/^CAP_/, '')}</span>
+              </div>
+            `;
+          }).join('');
+          const capGridEl = document.querySelector('#cdScrollArea .cd-cap-grid');
+          if (capGridEl) {
+            capGridEl.innerHTML = newGridHtml;
+            capGridEl.style.opacity = '1';
+          }
+          const badgeEl = document.querySelector('#cdScrollArea .count-badge');
+          if (badgeEl) {
+            badgeEl.textContent = `共 41 项 / 已拥有 ${count2}`;
+          }
+
+          // 3) 重绘端口
+          if (Array.isArray(detail.ports) && detail.ports.length > 0) {
+            const pHtml = detail.ports.map(p => {
+              if (typeof p === 'string') {
+                const m = p.match(/^(.*?):(\d+)\s*(?:->|=>|:)\s*(\d+)(?:\/(\w+))?$/);
+                if (m) {
+                  const hostIp = m[1] || '0.0.0.0';
+                  const hostPort = m[2];
+                  const contPort = m[3];
+                  const proto = (m[4] || 'tcp').toLowerCase();
+                  return `<div class="cd-list-row">
+                    <div class="cd-list-icon">\u{1F50C}</div>
+                    <div class="cd-list-main">
+                      <span class="part-highlight">${hostIp}:${hostPort}</span>
+                      <span class="part-arrow">\u{25B6}</span>
+                      <span>容器端口 <span class="part-highlight">${contPort}</span> / ${proto.toUpperCase()}</span>
+                    </div>
+                  </div>`;
+                }
+                return `<div class="cd-list-row"><div class="cd-list-icon">\u{1F50C}</div><div class="cd-list-main">${p}</div></div>`;
+              }
+              return '';
+            }).join('');
+            const portsCard = document.querySelector('#cdScrollArea .cd-bottom-cards .cd-list-card:nth-child(1)');
+            if (portsCard) {
+              // 修复 replaceWith 破坏锚点：改用 innerHTML 替换整个卡片内容
+              const titleEl = portsCard.querySelector('.cd-card-title');
+              portsCard.innerHTML = '';
+              if (titleEl) portsCard.appendChild(titleEl);
+              const tmp = document.createElement('div');
+              tmp.innerHTML = pHtml;
+              while (tmp.firstChild) portsCard.appendChild(tmp.firstChild);
+            }
+          } else if (portCard) {
+            portCard.innerHTML = '无端口映射配置';
+          }
+
+          // 4) 重绘挂载
+          if (Array.isArray(detail.mounts) && detail.mounts.length > 0) {
+            const mHtml = detail.mounts.map(mm => {
+              if (typeof mm === 'string') {
+                const parts = mm.split(':');
+                let src = '', dst = '', mode = '';
+                if (parts.length === 2) { src = parts[0] || ''; dst = parts[1] || ''; }
+                else if (parts.length >= 3) {
+                  const maybeMode = parts[parts.length - 1];
+                  if (/^(rw|ro|z|Z|shared|private|slave|rshared|rprivate|rslave|copy|nocopy)$/i.test(maybeMode)) {
+                    mode = maybeMode;
+                    const rest = parts.slice(0, -1);
+                    src = rest[0] || '';
+                    dst = rest.slice(1).join(':') || '';
+                  } else {
+                    src = parts[0] || '';
+                    dst = parts.slice(1).join(':') || '';
+                  }
+                } else { src = mm; }
+                const isRo = /ro|readonly/i.test(String(mode));
+                const modeColor = isRo ? '#60a5fa' : '';
+                return `<div class="cd-list-row">
+                  <div class="cd-list-icon">\u{1F4C1}</div>
+                  <div class="cd-list-main">
+                    <span class="part-highlight" title="${src}">${src.length > 30 ? '...' + src.substring(src.length - 30) : src}</span>
+                    ${dst ? `<span class="part-arrow">\u{25B6}</span><span title="${dst}">${dst.length > 30 ? '...' + dst.substring(dst.length - 30) : dst}</span>` : ''}
+                    ${mode ? ` <span style="color:${modeColor || '#ffaa00'};margin-left:6px;font-size:11px;padding:1px 6px;border:1px solid ${modeColor || 'rgba(255,170,0,0.3)'};border-radius:4px;background:${modeColor ? 'rgba(68,136,255,0.08)' : 'rgba(255,170,0,0.08)'};">${mode.toUpperCase()}</span>` : ''}
+                  </div>
+                </div>`;
+              }
+              return '';
+            }).join('');
+            const mountsCard = document.querySelector('#cdScrollArea .cd-bottom-cards .cd-list-card:nth-child(2)');
+            if (mountsCard) {
+              // 修复 replaceWith 破坏锚点：改用 innerHTML 替换整个卡片内容
+              const titleEl = mountsCard.querySelector('.cd-card-title');
+              mountsCard.innerHTML = '';
+              if (titleEl) mountsCard.appendChild(titleEl);
+              const tmp = document.createElement('div');
+              tmp.innerHTML = mHtml;
+              while (tmp.firstChild) mountsCard.appendChild(tmp.firstChild);
+            }
+          } else if (mountCard) {
+            mountCard.innerHTML = '无挂载卷配置';
+          }
+
+          // 5) 如果有 securityScore，刷新评分和等级
+          if (detail.securityScore !== undefined && detail.securityScore !== null && detail.securityScore !== '') {
+            const dangerScore = Math.max(0, Math.min(100, parseFloat(detail.securityScore) || 0));
+            const newClass = dangerScore <= 20 ? 'score-s1' : dangerScore <= 40 ? 'score-s2' : dangerScore <= 60 ? 'score-s3' : dangerScore <= 80 ? 'score-s4' : 'score-s5';
+            const newLevelClass = dangerScore <= 20 ? 'level-s1' : dangerScore <= 40 ? 'level-s2' : dangerScore <= 60 ? 'level-s3' : dangerScore <= 80 ? 'level-s4' : 'level-s5';
+            const newLevelText = dangerScore <= 20 ? '安全' : dangerScore <= 40 ? '低危' : dangerScore <= 60 ? '中危' : dangerScore <= 80 ? '高危' : '严重';
+
+            const scoreNumEl = document.querySelector('#cdScrollArea .cd-score-number');
+            if (scoreNumEl) {
+              scoreNumEl.textContent = dangerScore;
+              scoreNumEl.className = 'cd-score-number ' + newClass;
+            }
+
+            const fillEl = document.querySelector('#cdScrollArea .cd-score-bar-fill');
+            if (fillEl) fillEl.style.width = dangerScore + '%';
+
+            const ringFillEl = document.querySelector('#cdScrollArea .cd-score-ring-fill');
+            if (ringFillEl) {
+              const RING_R = 88;
+              const RING_C = 2 * Math.PI * RING_R;
+              const offset = RING_C - (dangerScore / 100) * RING_C;
+              ringFillEl.setAttribute('stroke-dashoffset', offset);
+            }
+
+            const lvlEl = document.querySelector('#cdScrollArea .cd-risk-level-badge');
+            if (lvlEl) {
+              lvlEl.textContent = newLevelText;
+              lvlEl.className = 'cd-risk-level-badge ' + newLevelClass;
+            }
+            // 6) 重新渲染安全检查 (静态1-42 + 动态43-51)
+            if (detail.securityChecks && Object.keys(detail.securityChecks).length > 0) {
+              const mergedContainer = Object.assign({}, container, {
+                securityChecks: detail.securityChecks,
+                status: detail.status || container.status,
+                securityScore: detail.securityScore,
+                riskLevel: detail.riskLevel,
+                riskFlags: detail.flags || detail.riskFlags || container.riskFlags
+              });
+              renderSecurityChecks(mergedContainer);
+              // 重新触发动画
+              if (detail.securityScore !== undefined) {
+                setTimeout(() => {
+                  animateScore(detail.securityScore);
+                }, 100);
+              }
+            }
+          }
+        } catch (e) {
+          console.log('异步查询容器详情失败（可能是列表卡片，无此字段属正常）：', e && e.message ? e.message : e);
+          const badgeEl = document.querySelector('#cdScrollArea .count-badge');
+          if (badgeEl && badgeEl.textContent === '加载中...') {
+            // 前端已渲染的是 41 项 0 拥有的网格，正常展示即可
+            badgeEl.textContent = `共 41 项 / 已拥有 0`;
+          }
+          const grid2 = document.querySelector('#cdScrollArea .cd-cap-grid');
+          if (grid2) grid2.style.opacity = '1';
+          if (portCard && /查询/.test(portCard.textContent || '')) portCard.innerHTML = '无端口映射配置';
+          if (mountCard && /查询/.test(mountCard.textContent || '')) mountCard.innerHTML = '无挂载卷配置';
+        }
+      })();
+    }
+  }
+}
+
+// ===== 51项安全检查渲染函数 =====
+
+// 安全检查项定义 (1-42静态, 43-51动态)
+const SECURITY_CHECKS = [
+  // === 静态检查项 (1-42) ===
+  { id: 1,  name: '特权模式', check: 'Privileged', risk: 'critical', static: true },
+  { id: 2,  name: '新增能力', check: 'CapAdd', risk: 'high', static: true },
+  { id: 3,  name: '丢弃能力', check: 'CapDrop', risk: 'medium', static: true },
+  { id: 4,  name: 'Seccomp', check: 'Seccomp', risk: 'high', static: true },
+  { id: 5,  name: 'AppArmor', check: 'AppArmor', risk: 'medium', static: true },
+  { id: 6,  name: 'SELinux', check: 'SELinux', risk: 'medium', static: true },
+  { id: 7,  name: 'NoNewPrivileges', check: 'NoNewPrivileges', risk: 'medium', static: true },
+  { id: 8,  name: '根文件系统只读', check: 'ReadonlyRootfs', risk: 'medium', static: true },
+  { id: 9,  name: 'User Namespace', check: 'Userns', risk: 'low', static: true },
+  { id: 10, name: 'PID Namespace', check: 'PidMode', risk: 'safe', static: true },
+  { id: 11, name: '网络模式', check: 'NetworkMode', risk: 'high', static: true },
+  { id: 12, name: '端口映射', check: 'PortMappings', risk: 'medium', static: true },
+  { id: 13, name: 'DNS配置', check: 'DNSConfig', risk: 'safe', static: true },
+  { id: 14, name: 'Hosts文件', check: 'HostsFile', risk: 'safe', static: true },
+  { id: 15, name: '挂载卷类型', check: 'BindMount', risk: 'medium', static: true },
+  { id: 16, name: '挂载读写权限', check: 'MountRW', risk: 'medium', static: true },
+  { id: 17, name: '敏感路径挂载', check: 'SensitiveMount', risk: 'critical', static: true },
+  { id: 18, name: '设备映射', check: 'DeviceMapping', risk: 'medium', static: true },
+  { id: 19, name: 'tmpfs大小', check: 'TmpfsSize', risk: 'low', static: true },
+  { id: 20, name: '日志驱动', check: 'LogDriver', risk: 'medium', static: true },
+  { id: 21, name: '日志大小限制', check: 'LogMaxSize', risk: 'low', static: true },
+  { id: 22, name: 'CPU限制', check: 'CPULimit', risk: 'medium', static: true },
+  { id: 23, name: '内存限制', check: 'MemoryLimit', risk: 'medium', static: true },
+  { id: 24, name: 'PIDs限制', check: 'PidsLimit', risk: 'low', static: true },
+  { id: 25, name: '文件描述符限制', check: 'UlimitNofile', risk: 'low', static: true },
+  { id: 26, name: '磁盘I/O限制', check: 'DeviceIO', risk: 'low', static: true },
+  { id: 27, name: 'cgroup配置', check: 'CgroupNs', risk: 'medium', static: true },
+  { id: 28, name: 'IPC Namespace', check: 'IpcMode', risk: 'medium', static: true },
+  { id: 29, name: 'UTS Namespace', check: 'UtsMode', risk: 'low', static: true },
+  { id: 30, name: 'sysctl修改', check: 'Sysctl', risk: 'medium', static: true },
+  { id: 31, name: 'security-opt', check: 'SecurityOpt', risk: 'low', static: true },
+  { id: 32, name: '镜像Digest', check: 'ImageDigest', risk: 'medium', static: true },
+  { id: 33, name: '镜像来源', check: 'ImageSource', risk: 'medium', static: true },
+  { id: 34, name: '镜像标签', check: 'ImageTag', risk: 'low', static: true },
+  { id: 35, name: '镜像大小', check: 'ImageSize', risk: 'low', static: true },
+  { id: 36, name: '镜像构建时间', check: 'ImageBuildTime', risk: 'medium', static: true },
+  { id: 37, name: '镜像漏洞', check: 'ImageCVE', risk: 'safe', static: true },
+  { id: 38, name: '镜像层历史', check: 'ImageHistory', risk: 'medium', static: true },
+  { id: 39, name: '启动命令', check: 'Entrypoint', risk: 'high', static: true },
+  { id: 40, name: '环境变量', check: 'EnvVars', risk: 'high', static: true },
+  { id: 41, name: 'K8s SA Token', check: 'K8sToken', risk: 'medium', static: true },
+  { id: 42, name: '云服务元数据', check: 'CloudMetadata', risk: 'critical', static: true },
+
+  // === 动态检查项 (43-51，需运行中) ===
+  { id: 43, name: '容器内进程', check: 'InnerProcesses', risk: 'critical', static: false },
+  { id: 44, name: '容器内用户', check: 'InnerUsers', risk: 'low', static: false },
+  { id: 45, name: 'SUID/SGID文件', check: 'SuidFiles', risk: 'medium', static: false },
+  { id: 46, name: '计划任务', check: 'InnerCrontab', risk: 'high', static: false },
+  { id: 47, name: 'SSH服务', check: 'InnerSSH', risk: 'medium', static: false },
+  { id: 48, name: '开放文件描述符', check: 'OpenFD', risk: 'medium', static: false },
+  { id: 49, name: '网络连接状态', check: 'NetConnections', risk: 'critical', static: false },
+  { id: 50, name: '实际监听端口', check: 'ListenPorts', risk: 'medium', static: false },
+  { id: 51, name: '出站网络', check: 'OutboundNet', risk: 'medium', static: false },
+];
+
+// 优化：预计算静态和动态检查项，避免每次 renderSecurityChecks 都 filter
+const STATIC_CHECKS = SECURITY_CHECKS.filter(c => c.static);
+const DYNAMIC_CHECKS = SECURITY_CHECKS.filter(c => !c.static);
+
+function renderSecurityChecks(container) {
+  const isRunning = container.status === 'running';
+
+  // 从容器数据中获取检查结果
+  const checks = container.securityChecks || {};
+
+  // 渲染静态检查项
+  const staticEl = document.getElementById('cdStaticSecurity');
+  if (staticEl) {
+    staticEl.innerHTML = renderCheckCategory('静态安全检查', 'SEC-STATIC', STATIC_CHECKS, checks, false);
+  }
+
+  // 渲染动态检查项
+  const dynamicEl = document.getElementById('cdDynamicSecurity');
+  if (dynamicEl) {
+    if (isRunning) {
+      dynamicEl.innerHTML = renderCheckCategory('动态安全检查 (运行中检测)', 'SEC-DYNAMIC', DYNAMIC_CHECKS, checks, true);
+    } else {
+      dynamicEl.innerHTML = `
+        <div class="cd-dynamic-hint">
+          <span class="hint-icon">&#x23F8;</span>
+          <span>容器未运行，动态安全检查 (43-50项) 需在容器运行状态下才能执行</span>
+        </div>
+      `;
+    }
+  }
+}
+
+function renderCheckCategory(title, panelIdx, checkDefs, checkData, isDynamic) {
+  // 按id排序确保顺序 1-42
+  const sortedDefs = [...checkDefs].sort((a, b) => a.id - b.id);
+
+  const itemsHtml = sortedDefs.map(def => {
+    const data = checkData[def.check] || { passed: null, detail: '未检查', value: '-' };
+    let iconClass, iconText, riskClass, riskText;
+
+    // 获取风险等级文字
+    let riskLevelText = '';
+    if (def.risk === 'critical') riskLevelText = '严重';
+    else if (def.risk === 'high') riskLevelText = '高危';
+    else if (def.risk === 'medium') riskLevelText = '中危';
+    else if (def.risk === 'low') riskLevelText = '低危';
+    else if (def.risk === 'safe') riskLevelText = '安全';
+
+    if (data.passed === true) {
+      // 已配置：✓图标，根据风险等级显示对应颜色
+      iconText = '&#x2713;';
+      iconClass = 'pass';
+      if (def.risk === 'critical') {
+        riskClass = 'critical';
+      } else if (def.risk === 'high') {
+        riskClass = 'high';
+      } else if (def.risk === 'medium') {
+        riskClass = 'medium';
+      } else if (def.risk === 'low') {
+        riskClass = 'low';
+      } else if (def.risk === 'safe') {
+        riskClass = 'safe';
+      }
+      riskText = riskLevelText;
+    } else if (data.passed === false) {
+      // 未配置：○图标，统一灰色框
+      iconClass = 'na';
+      iconText = '&#x25CB;';
+      riskClass = 'na';
+      riskText = riskLevelText;
+    } else {
+      iconClass = 'na';
+      iconText = '?';
+      riskClass = '';
+      riskText = '';
+    }
+
+    return `
+      <div class="cd-sec-item" title="${def.name}: ${data.detail}${data.passed === false ? '（容器未配置此项）' : ''}">
+        <span class="cd-sec-icon ${iconClass}">${iconText}</span>
+        <div class="cd-sec-body">
+          <div class="cd-sec-name">${def.id}. ${def.name}</div>
+          <div class="cd-sec-desc">${data.detail}${data.value !== '-' ? ' | ' + data.value : ''}</div>
+          ${riskText ? `<span class="cd-sec-risk ${riskClass}">${riskText}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // 统计：已配置的项目数
+  const configCount = sortedDefs.filter(d => {
+    const data = checkData[d.check] || {};
+    return data.passed === true;
+  }).length;
+  const totalCount = sortedDefs.length;
+
+  return `
+    <div class="cd-security-card">
+      <div class="cyber-corner"></div>
+      <div class="cyber-corner-br"></div>
+      <div class="cyber-corner-tr"></div>
+      <div class="cyber-corner-bl"></div>
+      <div class="hud-side-mark"></div>
+      <div class="hud-status-dot"></div>
+      <div class="panel-index">${panelIdx}</div>
+      <div class="cd-section-header">
+        <div class="cd-section-title">
+          <span class="title-icon">&#x1F6E1;</span>
+          ${title}
+          <span class="count-badge">已配置 ${configCount}/${totalCount}</span>
+        </div>
+      </div>
+      <div class="cd-security-grid">
+        ${itemsHtml}
+      </div>
+      <div style="margin-top:8px;padding:6px 10px;background:rgba(0,255,255,0.05);border-left:2px solid var(--neon-cyan);font-size:11px;color:var(--neon-cyan);opacity:0.7;">
+        <span style="margin-right:12px;"><span style="display:inline-block;width:8px;height:8px;background:var(--neon-green);border-radius:2px;margin-right:4px;"></span>亮色 = 已配置</span>
+        <span><span style="display:inline-block;width:8px;height:8px;background:#555;border-radius:2px;margin-right:4px;"></span>灰色 = 未配置</span>
+      </div>
+    </div>
+  `;
+}
+
+function closeContainerDetail() {
+  currentDetailId = null; // 清除竞态守卫
+  document.getElementById('containerDetailOverlay').classList.remove('show');
+}
+
+// ===== 评分动画函数 =====
+function animateScore(targetScore) {
+  const scoreEl = document.getElementById('cdScoreNumber');
+  const ringEl = document.getElementById('cdScoreRing');
+  const barEl = document.getElementById('cdScoreBar');
+
+  if (!scoreEl) return;
+
+  const RING_R = 88;
+  const RING_C = 2 * Math.PI * RING_R;
+
+  // 重置初始状态
+  scoreEl.textContent = '0';
+  if (ringEl) ringEl.style.strokeDashoffset = RING_C;
+  if (barEl) barEl.style.width = '0%';
+
+  // 0分也要显示动画（安全状态）
+
+  const duration = 1000; // 优化：从4秒缩短到1秒
+  const startTime = performance.now();
+
+  // easeOutCubic: 从快到慢的缓动函数
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = easeOutCubic(progress);
+
+    // 数字动画 - 从快到慢 (0-100整数)
+    const currentScore = Math.round(eased * targetScore);
+    scoreEl.textContent = currentScore;
+
+    // 圆环动画 - 基于100分制
+    if (ringEl) {
+      const offset = RING_C - (eased * (targetScore / 100) * RING_C);
+      ringEl.style.strokeDashoffset = offset;
+    }
+
+    // 进度条动画 - 基于100分制
+    if (barEl) {
+      barEl.style.width = (eased * targetScore) + '%';
+    }
+
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    }
+  }
+
+  requestAnimationFrame(update);
+}
+
+// ==================== 容器检查 - 修复统计和显示 ====================
+async function scanContainers(scanType) {
+  const statsGrid = document.getElementById('statsGrid');
+  const containerGrid = document.getElementById('containerGrid');
+
+  if (!rootPasswordSet) {
+    showRootGrantModal();
+    return;
+  }
+
+  statsGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted);">扫描中...</div>';
+  containerGrid.innerHTML = '';
+
+  try {
+    const result = await window.go.main.App.ScanContainers(scanType);
+
+    if (result.error) {
+      statsGrid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--danger);">错误: ${escapeHtml(result.error)}</div>`;
+      return;
+    }
+
+    lastScanResult = result;
+
+    // 【修复7】6列统计: 总/严重/高危/中危/安全/已停止
+    // 已停止的容器统计
+    const actualStopped = result.processes.filter(p => p.status !== 'running').length;
+
+    statsGrid.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--text-primary);">${result.totalProcs}</div>
+        <div class="stat-label">总进程</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#ff0040;">${result.riskStats['严重'] || 0}</div>
+        <div class="stat-label">严重</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#ff6600;">${result.riskStats['高危'] || 0}</div>
+        <div class="stat-label">高危</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#ffcc00;">${result.riskStats['中危'] || 0}</div>
+        <div class="stat-label">中危</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#00ff88;">${result.riskStats['安全'] || 0}</div>
+        <div class="stat-label">安全</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#888;">${actualStopped}</div>
+        <div class="stat-label">已停止</div>
+      </div>
+    `;
+
+    if (result.processes.length === 0) {
+      containerGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">未发现容器进程</div>';
+    } else {
+      renderContainerGrid(result.processes);
+    }
+  } catch (e) {
+    statsGrid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--danger);">扫描失败: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderContainerGrid(processes) {
+  const grid = document.getElementById('containerGrid');
+  const sorted = getSortedContainers(processes);
+
+  grid.innerHTML = sorted.map((p, index) => {
+    // 修复：添加"低危"卡片样式分支
+    const cardClass = p.riskLevel === '严重' ? 'card-severe' : 
+                     p.riskLevel === '高危' ? 'card-high' : 
+                     p.riskLevel === '中危' ? 'card-medium' : 
+                     p.riskLevel === '低危' ? 'card-low' : 
+                     p.riskLevel === '安全' ? 'card-safe' : 'card-stopped';
+
+    const isRunning = p.status === 'running';
+    const displayId = p.PID ? `PID:${p.PID}` : (p.id ? p.id.substring(0,12) : 'N/A');
+    const flagCount = p.riskFlags ? p.riskFlags.length : 0;
+
+    let riskTagClass = 'stopped-tag';
+    let riskLabel = p.riskLevel || '已停止';
+    if (p.status === 'running') {
+      if (p.riskLevel === '严重') riskTagClass = 'severe';
+      else if (p.riskLevel === '高危') riskTagClass = 'high';
+      else if (p.riskLevel === '中危') riskTagClass = 'medium';
+      else riskTagClass = 'low';
+    }
+
+    return `
+      <div class="container-card ${cardClass}" onclick="showContainerDetailFromGrid(${index})">
+        <div class="container-card-header">
+          <div class="container-card-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+          <div class="container-card-number">${index + 1}</div>
+        </div>
+        <div class="container-card-id">${escapeHtml(displayId)}</div>
+        <div class="container-card-status">
+          <span class="status-tag ${isRunning ? 'running' : 'stopped'}">
+            <span style="width:6px;height:6px;border-radius:50%;display:inline-block;background:currentColor;opacity:0.8;"></span>
+            ${isRunning ? '运行中' : '已停止'}
+          </span>
+          <span class="risk-tag ${riskTagClass}">${escapeHtml(riskLabel)}</span>
+        </div>
+        <div class="container-card-info">
+          <span title="用户">&#x1F464; ${escapeHtml(p.user || '-')}</span>
+          <span title="类型">&#x1F433; ${escapeHtml(p.containerType || 'docker')}</span>
+          <span title="风险评分">&#x1F4CA; ${p.riskScore !== undefined ? p.riskScore : (p.securityScore !== undefined ? p.securityScore : 0)}</span>
+          <span title="标记">&#x26A0; ${flagCount}项</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function showContainerDetailFromGrid(index) {
+  if (!lastScanResult) return;
+  const sorted = getSortedContainers(lastScanResult.processes);
+  if (index >= 0 && index < sorted.length) {
+    showContainerDetail(sorted[index]);
+  }
+}
+
+// ==================== 额外下载 ====================
+async function loadToolsStatus() {
+  const grid = document.getElementById('toolsGrid');
+  grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">检测中...</div>';
+
+  try {
+    const tools = await window.go.main.App.CheckTools();
+
+    grid.innerHTML = tools.map(t => `
+      <div class="tool-item">
+        <div class="tool-info">
+          <div class="tool-name">${escapeHtml(t.name)}</div>
+          <div class="tool-desc">${escapeHtml(t.description)}</div>
+          <div class="tool-version ${t.installed ? 'installed' : 'missing'}">
+            ${t.installed ? '&#x2705; ' + escapeHtml(t.version) : '&#x274C; 未安装'}
+          </div>
+        </div>
+        <div class="tool-actions">
+          ${!t.installed ? `<button class="install-btn" onclick="installTool('${escapeHtml(t.name)}')">&#x1F4E5; 下载安装</button>` : '<span style="color:var(--success);font-size:13px;">&#x2705; 已就绪</span>'}
+          <div class="install-cmd" onclick="copyCmd(this)" title="点击复制">${escapeHtml(t.installCmd)}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    grid.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger);">检测失败: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function installTool(name) {
+  try {
+    const result = await window.go.main.App.InstallTool(name);
+    alert(result);
+    loadToolsStatus();
+  } catch (e) {
+    alert('安装失败: ' + e.message);
+  }
+}
+
+function copyCmd(element) {
+  const text = element.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const original = element.textContent;
+    // 修复：使用 innerHTML 解析 HTML 实体，正确显示 emoji
+    element.innerHTML = '&#x2705; 已复制!';
+    element.style.color = 'var(--success)';
+    setTimeout(() => {
+      element.textContent = original;
+      element.style.color = '';
+    }, 2000);
+  }).catch(() => {
+    // 修复：添加 catch 处理剪贴板失败
+    const original = element.textContent;
+    element.innerHTML = '&#x274C; 复制失败';
+    element.style.color = 'var(--danger)';
+    setTimeout(() => {
+      element.textContent = original;
+      element.style.color = '';
+    }, 2000);
+  });
+}
+
+// ==================== 关闭应用 ====================
+function closeApp() {
+  if (window.runtime && typeof window.runtime.Quit === 'function') {
+    window.runtime.Quit();
+  } else {
+    window.close();
+  }
+}
+
+// ==================== 容器加固（已迁移至防线部署页面，以下为废弃死代码清理） ====================
+// 注：原 hardenModal/hardenContainerList 等 DOM 元素已不存在，相关函数已移除
+// 防线部署功能请使用 executeDeploy / loadDeployContainers 等函数
+
+// ==================== 防线部署 ====================
+let deployContainers = [];
+let selectedDeployContainers = new Set();
+
+async function loadDeployContainers() {
+  const list = document.getElementById('deployContainerList');
+  list.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted);">加载中...</div>';
+
+  try {
+    const containers = await window.go.main.App.GetHardenContainers();
+    deployContainers = containers || [];
+
+    if (deployContainers.length === 0) {
+      list.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted);">未检测到容器，请检查Docker是否运行</div>';
+      return;
+    }
+
+    list.innerHTML = deployContainers.map((c, index) => {
+      const isRunning = c.status === 'running';
+      const statusColor = isRunning ? 'var(--success)' : 'var(--stopped)';
+      const statusDotColor = isRunning ? 'var(--success)' : '#555';
+      const cardClass = isRunning ? 'card-safe' : 'card-stopped';
+
+      return `<div class="deploy-container-item ${cardClass}" 
+           data-id="${escapeHtml(c.id)}" 
+           onclick="toggleDeployContainer('${escapeHtml(c.id)}')"
+           style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</div>
+          <div style="width:22px;height:22px;background:var(--bg-tertiary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-secondary);border:1px solid var(--border);flex-shrink:0;margin-left:6px;">${index + 1}</div>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);font-family:monospace;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml((c.id||'').substring(0,12))}</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;">
+          <span style="width:8px;height:8px;border-radius:50%;display:inline-block;background:${statusDotColor};"></span>
+          <span style="color:${statusColor};">${isRunning ? '运行中' : '已停止'}</span>
+        </div>
+        <div class="deploy-check" style="position:absolute;top:8px;right:8px;width:16px;height:16px;border:1px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;background:transparent;">
+          <span style="display:none;color:#fff;font-size:11px;">&#x2713;</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--danger);">加载失败: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function toggleDeployContainer(id) {
+  const item = document.querySelector(`.deploy-container-item[data-id="${id}"]`);
+  if (!item) return;
+  const check = item.querySelector('.deploy-check');
+  const checkMark = check.querySelector('span');
+
+  if (selectedDeployContainers.has(id)) {
+    selectedDeployContainers.delete(id);
+    item.style.borderColor = 'var(--border)';
+    item.style.background = 'var(--bg-card)';
+    check.style.background = 'transparent';
+    check.style.borderColor = 'var(--border)';
+    checkMark.style.display = 'none';
+  } else {
+    selectedDeployContainers.add(id);
+    item.style.borderColor = 'var(--success)';
+    item.style.background = 'rgba(34,197,94,0.1)';
+    check.style.background = 'var(--success)';
+    check.style.borderColor = 'var(--success)';
+    checkMark.style.display = 'block';
+  }
+
+  document.getElementById('deploySelectedCount').textContent = `已选 ${selectedDeployContainers.size} 个`;
+
+  const allItems = document.querySelectorAll('.deploy-container-item');
+  document.getElementById('deploySelectAll').checked = selectedDeployContainers.size === allItems.length && allItems.length > 0;
+}
+
+function toggleSelectAllDeploy() {
+  const checked = document.getElementById('deploySelectAll').checked;
+  const allItems = document.querySelectorAll('.deploy-container-item');
+
+  allItems.forEach(item => {
+    const id = item.getAttribute('data-id');
+    const check = item.querySelector('.deploy-check');
+    const checkMark = check.querySelector('span');
+
+    if (checked) {
+      selectedDeployContainers.add(id);
+      item.style.borderColor = 'var(--success)';
+      item.style.background = 'rgba(34,197,94,0.1)';
+      check.style.background = 'var(--success)';
+      check.style.borderColor = 'var(--success)';
+      checkMark.style.display = 'block';
+    } else {
+      selectedDeployContainers.delete(id);
+      item.style.borderColor = 'var(--border)';
+      item.style.background = 'var(--bg-card)';
+      check.style.background = 'transparent';
+      check.style.borderColor = 'var(--border)';
+      checkMark.style.display = 'none';
+    }
+  });
+
+  document.getElementById('deploySelectedCount').textContent = `已选 ${selectedDeployContainers.size} 个`;
+}
+
+async function executeDeploy() {
+  if (selectedDeployContainers.size === 0) {
+    alert('请先选择要加固的容器');
+    return;
+  }
+
+  const selectedOpts = [];
+  document.querySelectorAll('.deploy-opt:checked').forEach(cb => {
+    selectedOpts.push(cb.value);
+  });
+
+  if (selectedOpts.length === 0) {
+    alert('请选择至少一项加固方式');
+    return;
+  }
+
+  const tasks = [];
+  selectedDeployContainers.forEach(id => {
+    const container = deployContainers.find(c => c.id === id);
+    if (container) {
+      tasks.push({
+        container_id: id,
+        container_name: container.name,
+        options: selectedOpts
+      });
+    }
+  });
+
+  document.getElementById('deployExecuteBtn').disabled = true;
+  document.getElementById('deployExecuteBtn').textContent = '加固中...';
+  document.getElementById('deployProgressArea').style.display = 'block';
+
+  try {
+    const result = await window.go.main.App.DoHarden({ tasks: tasks });
+
+    // 修复：移除假进度条动画（后端已返回才开始跑），直接显示100%
+    document.getElementById('deployProgressBar').style.width = '100%';
+    document.getElementById('deployProgressText').textContent = '100%';
+
+    let successCount = 0;
+    let failCount = 0;
+    let failMessages = [];
+    result.results.forEach(r => {
+      if (r.success) successCount++;
+      else {
+        failCount++;
+        failMessages.push(`${r.container_name}: ${r.message}`);
+      }
+    });
+
+    document.getElementById('deployExecuteBtn').textContent = '完成';
+    document.getElementById('deployExecuteBtn').disabled = false;
+
+    let msg = `加固完成！\n成功: ${successCount} 个\n失败: ${failCount} 个`;
+    if (failMessages.length > 0) {
+      msg += '\n\n失败详情:\n' + failMessages.join('\n');
+    }
+    alert(msg);
+
+    await loadDeployContainers();
+
+  } catch (e) {
+    document.getElementById('deployExecuteBtn').textContent = '加固';
+    document.getElementById('deployExecuteBtn').disabled = false;
+    document.getElementById('deployProgressArea').style.display = 'none';
+    alert('加固失败: ' + e.message);
+  }
+}
+
+// 注：loadHardenContainers / toggleHardenContainer / toggleSelectAllHarden / executeHarden
+// 已删除（引用不存在的 hardenContainerList / hardenModal 等 DOM 元素，属死代码）
+// 防线部署功能由 executeDeploy / loadDeployContainers 提供
+
+// ==================== 初始化 ====================
+document.addEventListener('DOMContentLoaded', () => {
+  handleInputAuto();
+  checkRootStatus();
+});
+</script>
+</body>
+</html>

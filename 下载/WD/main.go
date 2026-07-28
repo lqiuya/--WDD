@@ -11,9 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
+	"log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -29,8 +29,12 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-//go:embed.gitkeep
+// 【修复4.3】seccomp 默认配置从外部文件嵌入，避免在代码中内联大段 JSON
+//
+//go:embed seccomp-default.json
 var seccompProfileData []byte
+
+// ==================== App 结构 ====================
 
 type App struct {
 	ctx          context.Context
@@ -44,6 +48,8 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
+
+// ==================== 文件选择 ====================
 
 func (a *App) OpenFileDialog() string {
 	selection, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
@@ -68,50 +74,36 @@ func (a *App) OpenDirectoryDialog() string {
 	return selection
 }
 
-func (a *App) SetRootPassword(password string) bool {
-	// 先清除之前的密码
-	a.rootPassword = ""
+// ==================== Root 密码管理 ====================
+//
+// 【修复2.5】root密码安全说明：
+// 1. 密码仅在内存中持有，进程退出即消失，不写入磁盘
+// 2. 密码通过 sudo -S -k 从 stdin 传入，不会出现在命令行参数(进程列表)中
+// 3. 提供 ClearRootPassword 方法供前端在完成操作后主动清理
+// 4. 密码字段未导出(小写)，无法被外部包或 JSON 序列化访问
+// 5. 后续若需长期会话，可考虑替换为 sudo timestamp 文件机制，避免驻留密码
 
-	// 使用 sudo -S -k id 来验证密码，检查 uid=0(root)
-	cmd := exec.Command("sudo", "-S", "-k", "id")
+func (a *App) SetRootPassword(password string) bool {
+	cmd := exec.Command("sudo", "-S", "-k", "whoami")
 	cmd.Stdin = strings.NewReader(password + "\n")
 	output, err := cmd.CombinedOutput()
-	outputStr := strings.TrimSpace(string(output))
-
-	// 密码错误时 sudo 会返回错误
-	if err != nil {
-		// 检查是否是密码错误（sudo 的典型错误输出）
-		if strings.Contains(outputStr, "incorrect password") ||
-			strings.Contains(outputStr, "sorry, try again") ||
-			strings.Contains(outputStr, "authentication failure") ||
-			strings.Contains(outputStr, "password is required") ||
-			strings.Contains(outputStr, "no password was provided") ||
-			strings.Contains(outputStr, "3 incorrect password attempts") {
-			return false
-		}
-		// 其他错误也视为失败
+	if err != nil || !strings.Contains(string(output), "root") {
+		// 【修复2.5】验证失败时不要保留可能的错误密码
+		a.rootPassword = ""
 		return false
 	}
-
-	// 成功时检查输出中是否包含 root 标识
-	outputLower := strings.ToLower(outputStr)
-	isRoot := strings.Contains(outputLower, "uid=0") ||
-		strings.Contains(outputLower, "root") ||
-		strings.Contains(outputLower, "gid=0")
-
-	if !isRoot {
-		return false
-	}
-
 	a.rootPassword = password
 	return true
 }
 
+// ClearRootPassword 清除内存中的root密码，前端应在完成所有需要root的操作后调用
+// 【修复2.5】提供主动清理机制，减少密码驻留时间
 func (a *App) ClearRootPassword() bool {
 	a.rootPassword = ""
 	return true
 }
 
+// HasRootPassword 前端未使用，保留供未来扩展
 func (a *App) HasRootPassword() bool {
 	return a.rootPassword != ""
 }
@@ -123,6 +115,7 @@ func (a *App) CheckRootStatus() map[string]interface{} {
 }
 
 func (a *App) runSudoCommand(name string, args ...string) (string, error) {
+	// 添加30秒超时，防止sudo命令挂起导致应用卡死
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -134,6 +127,7 @@ func (a *App) runSudoCommand(name string, args ...string) (string, error) {
 	cmd.Stdin = strings.NewReader(a.rootPassword + "\n")
 	cmd.Env = os.Environ()
 
+	// 分离stdout和stderr，避免sudo提示污染输出
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -147,11 +141,13 @@ func (a *App) runSudoCommand(name string, args ...string) (string, error) {
 	return output, err
 }
 
+// isContainerIDLine 检查一行是否是有效的容器数据行，过滤sudo提示等污染
 func isContainerIDLine(line string) bool {
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return false
 	}
+	// 过滤sudo提示、密码提示、错误提示等
 	lower := strings.ToLower(line)
 	if strings.HasPrefix(lower, "sudo") ||
 		strings.HasPrefix(lower, "[sudo]") ||
@@ -161,6 +157,7 @@ func isContainerIDLine(line string) bool {
 		strings.Contains(lower, "password for") {
 		return false
 	}
+	// 检查第一列是否是12位十六进制容器ID
 	parts := strings.Split(line, "|")
 	if len(parts) < 1 {
 		return false
@@ -170,16 +167,21 @@ func isContainerIDLine(line string) bool {
 	return matched
 }
 
+// ==================== 输入识别 ====================
+
 type InputType struct {
 	Type        string `json:"type"`
 	Category    string `json:"category"`
 	Description string `json:"description"`
 }
 
+// DetectInputType 前端使用自己的JS实现，保留供未来扩展
 func (a *App) DetectInputType(rawInput string) InputType {
 	input := strings.TrimSpace(rawInput)
+	// 先去掉逗号/顿号+数字触发器
 	re := regexp.MustCompile(`[,，]\d+$`)
 	input = re.ReplaceAllString(input, "")
+	// 再去掉末尾单独的逗号/顿号
 	re2 := regexp.MustCompile(`[,，]$`)
 	input = re2.ReplaceAllString(input, "")
 	input = strings.TrimSpace(input)
@@ -211,6 +213,8 @@ func (a *App) DetectInputType(rawInput string) InputType {
 	return InputType{Type: "unknown", Category: "未知", Description: "未知类型"}
 }
 
+// ==================== 功能列表 ====================
+
 type FunctionItem struct {
 	Code        string `json:"code"`
 	Name        string `json:"name"`
@@ -219,6 +223,7 @@ type FunctionItem struct {
 	Description string `json:"description"`
 }
 
+// GetFunctions 前端使用自己的JS实现，保留供未来扩展
 func (a *App) GetFunctions(category string) []FunctionItem {
 	var functions []FunctionItem
 
@@ -270,6 +275,8 @@ func (a *App) GetFunctions(category string) []FunctionItem {
 
 	return functions
 }
+
+// ==================== 功能执行 ====================
 
 type ExecuteResult struct {
 	Success   bool   `json:"success"`
@@ -418,6 +425,8 @@ func (a *App) ExecuteFunction(code string, input string) ExecuteResult {
 	return result
 }
 
+// ==================== 纯Go实现的功能 ====================
+
 func (a *App) goPortScan(host string) (string, error) {
 	var result strings.Builder
 	result.WriteString(fmt.Sprintf("端口扫描 - 目标: %s\n", host))
@@ -494,6 +503,7 @@ func (a *App) goDirBrute(target string) (string, error) {
 	return result.String(), nil
 }
 
+// 【修复4.5】参数名从 filepath 改为 filePath，避免与 path/filepath 包名冲突
 func (a *App) goFileHash(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -517,6 +527,7 @@ func (a *App) goFileHash(filePath string) (string, error) {
 	return result, nil
 }
 
+// 【修复4.5】参数名从 filepath 改为 filePath，避免与 path/filepath 包名冲突
 func (a *App) goLogAnalysis(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -548,6 +559,7 @@ func (a *App) goLogAnalysis(filePath string) (string, error) {
 	return result.String(), nil
 }
 
+// 【修复4.5】参数名从 filepath 改为 filePath，避免与 path/filepath 包名冲突
 func (a *App) goConfigCheck(filePath string) (string, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -584,6 +596,8 @@ func (a *App) goConfigCheck(filePath string) (string, error) {
 	return result.String(), nil
 }
 
+// ==================== 容器权限检查 ====================
+
 var allCapabilities = []string{
 	"CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_DAC_READ_SEARCH", "CAP_FOWNER",
 	"CAP_FSETID", "CAP_KILL", "CAP_SETGID", "CAP_SETUID", "CAP_SETPCAP",
@@ -598,6 +612,7 @@ var allCapabilities = []string{
 	"CAP_CHECKPOINT_RESTORE",
 }
 
+// Docker默认开启的capabilities
 var defaultCapabilities = map[string]bool{
 	"CAP_CHOWN": true, "CAP_DAC_OVERRIDE": true, "CAP_FSETID": true,
 	"CAP_FOWNER": true, "CAP_MKNOD": true, "CAP_NET_RAW": true,
@@ -667,18 +682,22 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		return result
 	}
 
+	// 【修复2.1】将14次docker inspect合并为1次，一次性获取完整JSON后解析
+	// 【修复1.3】所有 json.Unmarshal 都检查错误，避免静默忽略解析失败
 	inspectJSON, err := a.runSudoCommand("docker", "inspect", "--format", "{{json .}}", containerID)
 	if err != nil {
 		result.Name = "错误：无法获取容器信息: " + err.Error()
 		return result
 	}
 
+	// 解析完整容器 JSON
 	var inspectData map[string]interface{}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(inspectJSON)), &inspectData); err != nil {
 		result.Name = "错误：解析容器JSON失败: " + err.Error()
 		return result
 	}
 
+	// 辅助函数：安全获取字符串
 	getStr := func(m map[string]interface{}, key string) string {
 		if v, ok := m[key].(string); ok {
 			return v
@@ -686,8 +705,10 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		return ""
 	}
 
+	// Name
 	result.Name = strings.TrimPrefix(strings.TrimSpace(getStr(inspectData, "Name")), "/")
 
+	// Config 子对象
 	configObj, _ := inspectData["Config"].(map[string]interface{})
 	if configObj != nil {
 		result.Image = strings.TrimSpace(getStr(configObj, "Image"))
@@ -695,6 +716,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		if result.User == "" || result.User == "<no value>" {
 			result.User = "root"
 		}
+		// Env
 		if envArr, ok := configObj["Env"].([]interface{}); ok {
 			for _, e := range envArr {
 				if s, ok := e.(string); ok {
@@ -704,11 +726,14 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		}
 	}
 
+	// State 子对象
 	stateObj, _ := inspectData["State"].(map[string]interface{})
 	if stateObj != nil {
 		result.Status = strings.TrimSpace(getStr(stateObj, "Status"))
 	}
 
+	// HostConfig 子对象
+	// 【修复2.1】secOpts 提升到函数作用域，供后续多处检查使用
 	var secOpts []string
 	hostConfig, _ := inspectData["HostConfig"].(map[string]interface{})
 	if hostConfig != nil {
@@ -718,6 +743,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		result.PidMode = strings.TrimSpace(getStr(hostConfig, "PidMode"))
 		result.IpcMode = strings.TrimSpace(getStr(hostConfig, "IpcMode"))
 
+		// SecurityOpt
 		if secOptArr, ok := hostConfig["SecurityOpt"].([]interface{}); ok {
 			for _, s := range secOptArr {
 				if str, ok := s.(string); ok {
@@ -740,6 +766,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 			}
 		}
 
+		// CapAdd / CapDrop
 		parseCapList := func(key string) []string {
 			var caps []string
 			if arr, ok := hostConfig[key].([]interface{}); ok {
@@ -754,6 +781,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		result.CapAdd = parseCapList("CapAdd")
 		result.CapDrop = parseCapList("CapDrop")
 
+		// PortBindings
 		if portBindings, ok := hostConfig["PortBindings"].(map[string]interface{}); ok {
 			for portKey, bindings := range portBindings {
 				if bindingsList, ok := bindings.([]interface{}); ok {
@@ -775,6 +803,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		}
 	}
 
+	// Mounts
 	if mountsArr, ok := inspectData["Mounts"].([]interface{}); ok {
 		for _, m := range mountsArr {
 			if mObj, ok := m.(map[string]interface{}); ok {
@@ -787,6 +816,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		}
 	}
 
+	// 计算 currentCaps
 	currentCaps := make(map[string]bool)
 	for cap := range defaultCapabilities {
 		currentCaps[cap] = true
@@ -823,26 +853,28 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		})
 	}
 
+	// === 静态检查项 (1-43) ===
 	result.SecurityChecks["Privileged"] = SecurityCheck{
 		Passed: !result.Privileged,
-		Detail: map[bool]string{true: "容器以特权模式运行（危险）", false: "未启用特权模式（安全）"}[result.Privileged],
+		Detail: map[bool]string{true: "未启用特权模式", false: "容器以特权模式运行"}[result.Privileged],
 		Value:  map[bool]string{true: "false", false: "true"}[result.Privileged],
 	}
 
 	hasCapAdd := len(result.CapAdd) > 0
 	result.SecurityChecks["CapAdd"] = SecurityCheck{
 		Passed: !hasCapAdd,
-		Detail: map[bool]string{true: "存在额外添加的Capabilities（危险）: " + strings.Join(result.CapAdd, ", "), false: "未添加额外Capabilities（安全）"}[hasCapAdd],
+		Detail: map[bool]string{true: "存在额外添加的Capabilities: " + strings.Join(result.CapAdd, ", "), false: "未添加额外Capabilities"}[hasCapAdd],
 		Value:  strings.Join(result.CapAdd, ", "),
 	}
 
 	hasCapDrop := len(result.CapDrop) > 0
 	result.SecurityChecks["CapDrop"] = SecurityCheck{
 		Passed: hasCapDrop,
-		Detail: map[bool]string{true: "已丢弃Capabilities（安全）: " + strings.Join(result.CapDrop, ", "), false: "未丢弃任何Capabilities（危险）"}[hasCapDrop],
+		Detail: map[bool]string{true: "已丢弃Capabilities: " + strings.Join(result.CapDrop, ", "), false: "未丢弃任何Capabilities(保留默认危险能力)"}[!hasCapDrop],
 		Value:  strings.Join(result.CapDrop, ", "),
 	}
 
+	// 【修复2.1】secOpts 已从单次 inspect 解析，无需重新获取
 	seccompUnconfined := false
 	for _, opt := range secOpts {
 		if strings.Contains(opt, "unconfined") {
@@ -851,7 +883,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["Seccomp"] = SecurityCheck{
 		Passed: !seccompUnconfined,
-		Detail: map[bool]string{true: "Seccomp未限制（危险）", false: "Seccomp已启用限制（安全）"}[seccompUnconfined],
+		Detail: map[bool]string{true: "Seccomp设置为unconfined(未限制)", false: "Seccomp已启用限制"}[seccompUnconfined],
 		Value:  map[bool]string{true: "unconfined", false: "enabled"}[seccompUnconfined],
 	}
 
@@ -869,12 +901,12 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		Passed: !apparmorUnconfined && !apparmorEmpty,
 		Detail: func() string {
 			if apparmorEmpty {
-				return "AppArmor未配置（危险）"
+				return "AppArmor未配置"
 			}
 			if apparmorUnconfined {
-				return "AppArmor未限制（危险）"
+				return "AppArmor设置为unconfined"
 			}
-			return "AppArmor已启用（安全）"
+			return "AppArmor已启用"
 		}(),
 		Value: map[bool]string{true: "unconfined", false: map[bool]string{true: "disabled", false: "enabled"}[apparmorEmpty]}[apparmorUnconfined],
 	}
@@ -887,39 +919,40 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["SELinux"] = SecurityCheck{
 		Passed: !selinuxDisabled,
-		Detail: map[bool]string{true: "SELinux已禁用（危险）", false: "SELinux状态正常（安全）"}[selinuxDisabled],
+		Detail: map[bool]string{true: "SELinux已禁用", false: "SELinux状态正常"}[selinuxDisabled],
 		Value:  map[bool]string{true: "disabled", false: "enabled/enforcing"}[selinuxDisabled],
 	}
 
 	result.SecurityChecks["NoNewPrivileges"] = SecurityCheck{
 		Passed: result.NoNewPrivileges,
-		Detail: map[bool]string{true: "已启用（安全）", false: "未启用（危险）"}[result.NoNewPrivileges],
+		Detail: map[bool]string{true: "已启用no-new-privileges", false: "未启用no-new-privileges(允许提权)"}[!result.NoNewPrivileges],
 		Value:  map[bool]string{true: "true", false: "false"}[result.NoNewPrivileges],
 	}
 
 	result.SecurityChecks["ReadonlyRootfs"] = SecurityCheck{
 		Passed: result.ReadonlyRootfs,
-		Detail: map[bool]string{true: "已启用（安全）", false: "未启用（危险）"}[result.ReadonlyRootfs],
+		Detail: map[bool]string{true: "根文件系统已设为只读", false: "根文件系统可写"}[!result.ReadonlyRootfs],
 		Value:  map[bool]string{true: "true", false: "false"}[result.ReadonlyRootfs],
 	}
 
+	// 【修复2.1】UsernsMode 从已解析的 hostConfig 获取
 	usernsMode := strings.TrimSpace(getStr(hostConfig, "UsernsMode"))
 	usernsEnabled := usernsMode != "" && usernsMode != "<no value>"
 	result.SecurityChecks["Userns"] = SecurityCheck{
 		Passed: usernsEnabled,
-		Detail: map[bool]string{true: "已启用（安全）: " + usernsMode, false: "未启用（危险）"}[usernsEnabled],
+		Detail: map[bool]string{true: "User Namespace已启用: " + usernsMode, false: "User Namespace未启用"}[usernsEnabled],
 		Value:  usernsMode,
 	}
 
 	result.SecurityChecks["PidMode"] = SecurityCheck{
 		Passed: result.PidMode != "host",
-		Detail: map[bool]string{true: "共享宿主机（危险）", false: "已隔离（安全）"}[result.PidMode == "host"],
+		Detail: map[bool]string{true: "PID Namespace与宿主机共享", false: "PID Namespace已隔离"}[result.PidMode == "host"],
 		Value:  result.PidMode,
 	}
 
 	result.SecurityChecks["NetworkMode"] = SecurityCheck{
 		Passed: result.NetworkMode != "host",
-		Detail: map[bool]string{true: "Host模式（危险）", false: "已隔离（安全）: " + result.NetworkMode}[result.NetworkMode == "host"],
+		Detail: map[bool]string{true: "网络模式为host(共享宿主机网络)", false: "网络模式已隔离: " + result.NetworkMode}[result.NetworkMode == "host"],
 		Value:  result.NetworkMode,
 	}
 
@@ -936,10 +969,11 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["PortMappings"] = SecurityCheck{
 		Passed: !hasHighRiskPort,
-		Detail: map[bool]string{true: "映射了高危端口（危险）: " + strings.Join(highRiskPortList, ", "), false: "未映射高危端口（安全）"}[hasHighRiskPort],
+		Detail: map[bool]string{true: "映射了高危端口: " + strings.Join(highRiskPortList, ", "), false: "未映射高危端口"}[hasHighRiskPort],
 		Value:  strings.Join(highRiskPortList, ", "),
 	}
 
+	// 【修复2.1】DNS 从已解析的 hostConfig 获取
 	dnsList := []string{}
 	if dnsArr, ok := hostConfig["DNS"].([]interface{}); ok {
 		for _, d := range dnsArr {
@@ -956,10 +990,11 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["DNSConfig"] = SecurityCheck{
 		Passed: !dnsMalicious,
-		Detail: map[bool]string{true: "DNS配置可能指向外部DNS（危险）: " + strings.Join(dnsList, ", "), false: "DNS配置正常（安全）"}[dnsMalicious],
+		Detail: map[bool]string{true: "DNS配置可能指向外部DNS: " + strings.Join(dnsList, ", "), false: "DNS配置正常"}[dnsMalicious],
 		Value:  strings.Join(dnsList, ", "),
 	}
 
+	// 【修复2.1】ExtraHosts 从已解析的 hostConfig 获取
 	extraHosts := []string{}
 	if ehArr, ok := hostConfig["ExtraHosts"].([]interface{}); ok {
 		for _, h := range ehArr {
@@ -976,7 +1011,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["HostsFile"] = SecurityCheck{
 		Passed: !hasAbnormalHosts,
-		Detail: map[bool]string{true: "Hosts文件存在异常解析（危险）: " + strings.Join(extraHosts, ", "), false: "Hosts文件无异常（安全）"}[hasAbnormalHosts],
+		Detail: map[bool]string{true: "Hosts文件存在异常解析: " + strings.Join(extraHosts, ", "), false: "Hosts文件无异常"}[hasAbnormalHosts],
 		Value:  strings.Join(extraHosts, ", "),
 	}
 
@@ -988,10 +1023,11 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["BindMount"] = SecurityCheck{
 		Passed: !hasBindMount,
-		Detail: map[bool]string{true: "存在bind mount（危险）", false: "无bind mount（安全）"}[hasBindMount],
+		Detail: map[bool]string{true: "存在bind mount挂载", false: "无bind mount(使用volume或tmpfs)"}[hasBindMount],
 		Value:  map[bool]string{true: "有", false: "无"}[hasBindMount],
 	}
 
+	// 【修复2.1】Mounts 详细信息从已解析的 inspectData 获取
 	hasRwMount := false
 	rwMounts := []string{}
 	if mountsArr, ok := inspectData["Mounts"].([]interface{}); ok {
@@ -1010,7 +1046,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["MountRW"] = SecurityCheck{
 		Passed: !hasRwMount,
-		Detail: map[bool]string{true: "读写模式（危险）: " + strings.Join(rwMounts, ", "), false: "只读或不存（安全）"}[hasRwMount],
+		Detail: map[bool]string{true: "bind mount为读写模式: " + strings.Join(rwMounts, ", "), false: "bind mount为只读或不存在"}[hasRwMount],
 		Value:  strings.Join(rwMounts, ", "),
 	}
 
@@ -1027,10 +1063,11 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["SensitiveMount"] = SecurityCheck{
 		Passed: !hasSensitiveMount,
-		Detail: map[bool]string{true: "挂载了敏感路径（危险）: " + strings.Join(sensitiveMountList, ", "), false: "未挂载（安全）"}[hasSensitiveMount],
+		Detail: map[bool]string{true: "挂载了敏感路径: " + strings.Join(sensitiveMountList, ", "), false: "未挂载敏感路径"}[hasSensitiveMount],
 		Value:  strings.Join(sensitiveMountList, ", "),
 	}
 
+	// 【修复2.1】Devices 从已解析的 hostConfig 获取
 	hasDevice := false
 	deviceList := []string{}
 	if devArr, ok := hostConfig["Devices"].([]interface{}); ok && len(devArr) > 0 {
@@ -1045,10 +1082,11 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["DeviceMapping"] = SecurityCheck{
 		Passed: !hasDevice,
-		Detail: map[bool]string{true: "存在设备映射（危险）: " + strings.Join(deviceList, ", "), false: "无设备映射（安全）"}[hasDevice],
+		Detail: map[bool]string{true: "存在设备映射: " + strings.Join(deviceList, ", "), false: "无设备映射"}[hasDevice],
 		Value:  strings.Join(deviceList, ", "),
 	}
 
+	// 【修复2.1】Tmpfs 从已解析的 hostConfig 获取
 	tmpfsUnlimited := false
 	tmpfsPaths := []string{}
 	if tmpfsMap, ok := hostConfig["Tmpfs"].(map[string]interface{}); ok {
@@ -1062,10 +1100,11 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["TmpfsSize"] = SecurityCheck{
 		Passed: !tmpfsUnlimited,
-		Detail: map[bool]string{true: "tmpfs未设置大小限制（危险）", false: "tmpfs已设置大小限制（安全）"}[tmpfsUnlimited],
+		Detail: map[bool]string{true: "tmpfs未设置大小限制", false: "tmpfs已设置大小限制"}[tmpfsUnlimited],
 		Value:  strings.Join(tmpfsPaths, "; "),
 	}
 
+	// 【修复2.1】LogConfig 从已解析的 hostConfig 获取
 	logConfig, _ := hostConfig["LogConfig"].(map[string]interface{})
 	logDriver := ""
 	if logConfig != nil {
@@ -1074,7 +1113,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	logNone := logDriver == "none" || logDriver == ""
 	result.SecurityChecks["LogDriver"] = SecurityCheck{
 		Passed: !logNone,
-		Detail: map[bool]string{true: "无日志审计（危险）", false: "已配置日志驱动（安全）: " + logDriver}[logNone],
+		Detail: map[bool]string{true: "日志驱动为none(无日志审计)", false: "日志驱动: " + logDriver}[logNone],
 		Value:  logDriver,
 	}
 
@@ -1091,10 +1130,12 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	hasMaxSize := logOpts["max-size"] != ""
 	result.SecurityChecks["LogMaxSize"] = SecurityCheck{
 		Passed: hasMaxSize,
-		Detail: map[bool]string{true: "已设置日志大小限制（安全）: " + logOpts["max-size"], false: "未设置日志大小限制（危险）"}[hasMaxSize],
+		Detail: map[bool]string{true: "已设置日志大小限制: " + logOpts["max-size"], false: "未设置日志大小限制"}[!hasMaxSize],
 		Value:  logOpts["max-size"],
 	}
 
+	// 【修复2.1】CPU 限制从已解析的 hostConfig 获取
+	// CpuShares/CpuPeriod/CpuQuota 在 JSON 中为数字类型
 	getNumStr := func(key string) string {
 		if v, ok := hostConfig[key]; ok {
 			switch n := v.(type) {
@@ -1114,26 +1155,29 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	cpuSet = cpuSet || (cpuQuota != "0" && cpuQuota != "" && cpuQuota != "<no value>")
 	result.SecurityChecks["CPULimit"] = SecurityCheck{
 		Passed: cpuSet,
-		Detail: map[bool]string{true: "已设置（安全）", false: "未设置（危险）"}[cpuSet],
+		Detail: map[bool]string{true: "未设置CPU限制(DoS风险)", false: "CPU限制已设置"}[!cpuSet],
 		Value:  "shares=" + cpuShares + " period=" + cpuPeriod + " quota=" + cpuQuota,
 	}
 
+	// 【修复2.1】内存限制从已解析的 hostConfig 获取
 	memLimit := getNumStr("Memory")
 	memSet := memLimit != "0" && memLimit != "" && memLimit != "<no value>"
 	result.SecurityChecks["MemoryLimit"] = SecurityCheck{
 		Passed: memSet,
-		Detail: map[bool]string{true: "已设置（安全）: " + memLimit, false: "未设置（危险）"}[memSet],
+		Detail: map[bool]string{true: "未设置内存限制(DoS风险)", false: "内存限制已设置: " + memLimit}[!memSet],
 		Value:  memLimit,
 	}
 
+	// 【修复2.1】PIDs 限制从已解析的 hostConfig 获取
 	pidsLimit := getNumStr("PidsLimit")
 	pidsSet := pidsLimit != "0" && pidsLimit != "" && pidsLimit != "<no value>"
 	result.SecurityChecks["PidsLimit"] = SecurityCheck{
 		Passed: pidsSet,
-		Detail: map[bool]string{true: "已设置（安全）: " + pidsLimit, false: "未设置（危险）"}[pidsSet],
+		Detail: map[bool]string{true: "未设置PIDs限制", false: "PIDs限制已设置: " + pidsLimit}[!pidsSet],
 		Value:  pidsLimit,
 	}
 
+	// 【修复2.1】Ulimits 从已解析的 hostConfig 获取
 	nofileSet := false
 	if ulimitArr, ok := hostConfig["Ulimits"].([]interface{}); ok {
 		for _, u := range ulimitArr {
@@ -1146,20 +1190,22 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityChecks["UlimitNofile"] = SecurityCheck{
 		Passed: nofileSet,
-		Detail: map[bool]string{true: "已设置（安全）", false: "未设置（危险）"}[nofileSet],
+		Detail: map[bool]string{true: "未设置文件描述符限制", false: "文件描述符限制已设置"}[!nofileSet],
 		Value:  map[bool]string{true: "已设置", false: "未设置"}[nofileSet],
 	}
 
+	// 【修复2.1】Blkio I/O 限制从已解析的 hostConfig 获取
 	readBpsArr, hasReadBps := hostConfig["BlkioDeviceReadBps"].([]interface{})
 	writeBpsArr, hasWriteBps := hostConfig["BlkioDeviceWriteBps"].([]interface{})
 	ioSet := hasReadBps && len(readBpsArr) > 0
 	ioSet = ioSet || (hasWriteBps && len(writeBpsArr) > 0)
 	result.SecurityChecks["DeviceIO"] = SecurityCheck{
 		Passed: ioSet,
-		Detail: map[bool]string{true: "已设置（安全）", false: "未设置（危险）"}[ioSet],
+		Detail: map[bool]string{true: "未设置磁盘I/O限制", false: "磁盘I/O限制已设置"}[!ioSet],
 		Value:  map[bool]string{true: "已设置", false: "未设置"}[ioSet],
 	}
 
+	// 【修复2.1】Cgroup 从已解析的 hostConfig 获取
 	cgroupMode := strings.TrimSpace(getStr(hostConfig, "Cgroup"))
 	cgroupShared := cgroupMode == "host" || cgroupMode == ""
 	result.SecurityChecks["CgroupNs"] = SecurityCheck{
@@ -1174,6 +1220,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		Value:  result.IpcMode,
 	}
 
+	// 【修复2.1】UTSMode 从已解析的 hostConfig 获取
 	utsMode := strings.TrimSpace(getStr(hostConfig, "UTSMode"))
 	utsShared := utsMode == "host"
 	result.SecurityChecks["UtsMode"] = SecurityCheck{
@@ -1182,6 +1229,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		Value:  utsMode,
 	}
 
+	// 【修复2.1】Sysctls 从已解析的 hostConfig 获取
 	sysctls := map[string]string{}
 	if sysctlObj, ok := hostConfig["Sysctls"].(map[string]interface{}); ok {
 		for k, v := range sysctlObj {
@@ -1208,6 +1256,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		Value:  strings.Join(secOpts, ", "),
 	}
 
+	// 【修复2.1】RepoDigests 从已解析的 inspectData 获取
 	repoDigests := []string{}
 	if rdArr, ok := inspectData["RepoDigests"].([]interface{}); ok {
 		for _, rd := range rdArr {
@@ -1238,6 +1287,8 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		Value:  map[bool]string{true: "latest", false: "fixed"}[isLatest],
 	}
 
+	// 【修复2.1】Size 从已解析的 inspectData 获取（注意: docker inspect --format {{json .}} 不含 Size，需单独获取）
+	// Size 字段在 docker inspect 的完整 JSON 中不存在，需用 docker inspect -s 获取
 	imageSizeOutput, _ := a.runSudoCommand("docker", "inspect", "-s", "--format", "{{.Size}}", containerID)
 	imageSize := strings.TrimSpace(imageSizeOutput)
 	sizeBytes := int64(0)
@@ -1252,10 +1303,11 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		Value:  fmt.Sprintf("%.2f GB", sizeGB),
 	}
 
+	// 【修复2.1】Created 从已解析的 inspectData 获取
 	createdTime := strings.TrimSpace(getStr(inspectData, "Created"))
 	created, err := time.Parse(time.RFC3339Nano, createdTime)
 	if err != nil {
-		created = time.Now()
+		created = time.Now() // 解析失败时使用当前时间，避免误判为旧镜像
 	}
 	oneYearAgo := time.Now().AddDate(-1, 0, 0)
 	isOld := created.Before(oneYearAgo)
@@ -1265,8 +1317,10 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		Value:  created.Format("2006-01-02"),
 	}
 
+	// 【修复2.1】Author 从已解析的 inspectData 获取
 	author := strings.TrimSpace(getStr(inspectData, "Author"))
 	if author == "" || author == "<no value>" {
+		// 从 Config.Labels 查找 maintainer/author
 		if configObj != nil {
 			if labelsObj, ok := configObj["Labels"].(map[string]interface{}); ok && len(labelsObj) > 0 {
 				for k, v := range labelsObj {
@@ -1318,6 +1372,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		Value:  strings.Join(suspiciousCmds, ", "),
 	}
 
+	// 【修复2.1】Entrypoint/Cmd 从已解析的 configObj 获取
 	entrypoint := []string{}
 	cmd := []string{}
 	if configObj != nil {
@@ -1354,7 +1409,7 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		if (strings.Contains(envUpper, "PASSWORD") || strings.Contains(envUpper, "SECRET") ||
 			strings.Contains(envUpper, "TOKEN") || strings.Contains(envUpper, "KEY") ||
 			(strings.Contains(envUpper, "AWS_ACCESS_KEY_ID") || strings.Contains(envUpper, "AWS_SECRET_ACCESS_KEY") ||
-				strings.Contains(envUpper, "AWS_SESSION_TOKEN") || strings.Contains(envUpper, "AWS_SECURITY_TOKEN")) ||
+			 strings.Contains(envUpper, "AWS_SESSION_TOKEN") || strings.Contains(envUpper, "AWS_SECURITY_TOKEN")) ||
 			strings.Contains(envUpper, "AZURE") || strings.Contains(envUpper, "GCP")) &&
 			!strings.Contains(envUpper, "SSH_AUTH_SOCK") && !strings.Contains(envUpper, "GPG_AGENT") {
 			hasSensitiveEnv = true
@@ -1515,64 +1570,64 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 		}
 	}
 
+	// ===== 风险评分计算 =====
+	// 【修复4.1】统一风险/加分项计算逻辑，使用表驱动方式，消除双向操作的重复代码
+	// 分数越高 = 越危险（0-100）
+	// 基于真实危险程度加权，而非简单扣分
 	score := 0
 
-	highRiskItems := map[string]int{
-		"Privileged":     12,
-		"SensitiveMount": 12,
-		"CapAdd":         10,
-		"PidMode":        8,
-		"NetworkMode":    8,
-		"Seccomp":        8,
-		"AppArmor":       8,
-		"DeviceMapping":  8,
-		"Entrypoint":     8,
-		"EnvVars":        8,
-		"ImageHistory":   8,
-		"InnerProcesses": 10,
-		"NetConnections": 10,
-		"InnerCrontab":   8,
-		"K8sToken":       8,
-		"CloudMetadata":  10,
-		"OpenFD":         6,
-		"ListenPorts":    6,
-	}
-	mediumRiskItems := map[string]int{
-		"NoNewPrivileges": 4,
-		"ReadonlyRootfs":  4,
-		"PortMappings":    3,
-		"BindMount":       3,
-		"MountRW":         3,
-		"LogDriver":       2,
-		"Sysctl":          2,
-		"InnerSSH":        2,
-		"SuidFiles":       3,
-		"HostsFile":       2,
-		"SELinux":         3,
-	}
-	lowRiskItems := map[string]int{
-		"Userns":      1,
-		"CgroupNs":    1,
-		"IpcMode":     1,
-		"UtsMode":     1,
-		"OutboundNet": 1,
-	}
-	for name, weight := range highRiskItems {
-		if check, ok := result.SecurityChecks[name]; ok && !check.Passed {
-			score += weight
-		}
-	}
-	for name, weight := range mediumRiskItems {
-		if check, ok := result.SecurityChecks[name]; ok && !check.Passed {
-			score += weight
-		}
-	}
-	for name, weight := range lowRiskItems {
-		if check, ok := result.SecurityChecks[name]; ok && !check.Passed {
-			score += weight
-		}
+	// 风险项表: 名称 -> 分值(负值表示加分项)
+	// Passed=false(存在风险) -> 加分(增加风险分)
+	// Passed=true(安全配置) -> 加分(减少风险分, 仅 bonus 项)
+	type riskEntry struct {
+		name   string
+		weight int // 正数=风险项(不通过时加), 负数=加分项(通过时减)
 	}
 
+	riskTable := []riskEntry{
+		// === 严重风险项 (Critical) - 每项 +15分 ===
+		{"Privileged", 15}, {"SensitiveMount", 15}, {"CloudMetadata", 15},
+		// === 高危风险项 (High) - 每项 +8分 ===
+		{"CapAdd", 8}, {"Seccomp", 8}, {"NetworkMode", 8}, {"Entrypoint", 8}, {"EnvVars", 8},
+		// === 中危风险项 (Medium) - 每项 +4分 ===
+		{"CapDrop", 4}, {"AppArmor", 4}, {"SELinux", 4}, {"NoNewPrivileges", 4},
+		{"ReadonlyRootfs", 4}, {"PortMappings", 4}, {"BindMount", 4}, {"MountRW", 4},
+		{"DeviceMapping", 4}, {"LogDriver", 4}, {"CPULimit", 4}, {"MemoryLimit", 4},
+		{"CgroupNs", 4}, {"IpcMode", 4}, {"Sysctl", 4}, {"ImageDigest", 4},
+		{"ImageSource", 4}, {"ImageBuildTime", 4}, {"ImageHistory", 4}, {"K8sToken", 4},
+		{"InnerSSH", 4}, {"SuidFiles", 4}, {"OpenFD", 4}, {"ListenPorts", 4},
+		{"OutboundNet", 4}, {"InnerCrontab", 4},
+		// === 低危风险项 (Low) - 每项 +2分 ===
+		{"Userns", 2}, {"TmpfsSize", 2}, {"LogMaxSize", 2}, {"PidsLimit", 2},
+		{"UlimitNofile", 2}, {"DeviceIO", 2}, {"UtsMode", 2}, {"SecurityOpt", 2},
+		{"ImageTag", 2}, {"ImageSize", 2}, {"InnerUsers", 2},
+		// === 安全加分项 (Bonus) - 最多减10分 ===
+		// 负值表示通过时减少风险分
+		{"CapDrop", -2}, {"Seccomp", -2}, {"ReadonlyRootfs", -2},
+		{"NoNewPrivileges", -1}, {"AppArmor", -1}, {"Userns", -1}, {"SecurityOpt", -1},
+	}
+
+	bonus := 0
+	for _, entry := range riskTable {
+		check, ok := result.SecurityChecks[entry.name]
+		if !ok {
+			continue
+		}
+		if entry.weight > 0 && !check.Passed {
+			// 风险项: 不通过时增加风险分
+			score += entry.weight
+		} else if entry.weight < 0 && check.Passed {
+			// 加分项: 通过时减少风险分
+			bonus += -entry.weight
+		}
+	}
+	// 加分项最多减10分
+	if bonus > 10 {
+		bonus = 10
+	}
+	score -= bonus
+
+	// 分数边界处理
 	if score < 0 {
 		score = 0
 	}
@@ -1581,21 +1636,23 @@ func (a *App) GetContainerDetail(containerID string) ContainerDetailResult {
 	}
 	result.SecurityScore = score
 
-	if score == 0 {
+	// 风险等级：分数越高越危险
+	if score <= 10 {
 		result.RiskLevel = "安全"
-	} else if score <= 8 {
-		result.RiskLevel = "安全"
-	} else if score <= 20 {
+	} else if score <= 25 {
 		result.RiskLevel = "低危"
-	} else if score <= 35 {
+	} else if score <= 45 {
 		result.RiskLevel = "中危"
-	} else if score <= 55 {
+	} else if score <= 70 {
 		result.RiskLevel = "高危"
 	} else {
 		result.RiskLevel = "严重"
 	}
+
 	return result
 }
+
+// ==================== 容器扫描 ====================
 
 type ContainerScanResult struct {
 	Success    bool               `json:"success"`
@@ -1632,9 +1689,11 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 		return result
 	}
 
+	// 统一使用sudo执行docker ps
+	// 【修复1.8/3.2】Success/Error 语义矛盾 + 不依赖英文字符串匹配，改用 err 与退出码判断
 	dockerOutput, err := a.runSudoCommand("docker", "ps", "-a", "--format", "{{.ID}}|{{.Image}}|{{.Names}}|{{.Status}}|{{.Ports}}")
 	if err != nil {
-		result.Success = false
+		result.Success = false // 修复: Docker未运行时应为 false
 		result.Error = "Docker服务未运行或未安装"
 		return result
 	}
@@ -1647,6 +1706,7 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 		if line == "" {
 			continue
 		}
+		// 过滤非容器行(sudo提示等污染)
 		if !isContainerIDLine(line) {
 			continue
 		}
@@ -1684,9 +1744,11 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 			RiskFlags:     []string{},
 		}
 
+		// 风险评估
 		score := 0
 		flags := []string{}
 
+		// 快速扫描
 		inspectOutput, _ := a.runSudoCommand("docker", "inspect", "--format", "{{.HostConfig.Privileged}}|{{.HostConfig.PidMode}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.IpcMode}}", containerID)
 		inspectParts := strings.Split(strings.TrimSpace(inspectOutput), "|")
 		if len(inspectParts) >= 1 && inspectParts[0] == "true" {
@@ -1706,6 +1768,7 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 			flags = append(flags, "Host IPC命名空间")
 		}
 
+		// 端口暴露检查
 		if ports != "" && ports != "<no value>" {
 			portList := strings.Split(ports, ", ")
 			for _, p := range portList {
@@ -1716,9 +1779,10 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 			}
 		}
 
+		// 标准扫描
 		if scanType == "standard" || scanType == "full" {
 			capOutput, _ := a.runSudoCommand("docker", "inspect", "--format", "{{.HostConfig.CapAdd}}", containerID)
-			capOutput = strings.TrimSpace(capOutput)
+			capOutput = strings.TrimSpace(capOutput) // 修复3.1: Docker输出带尾随换行导致判断失效
 			if capOutput != "<no value>" && capOutput != "[]" && capOutput != "" {
 				score += 15
 				flags = append(flags, "额外Capabilities")
@@ -1749,6 +1813,7 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 			}
 		}
 
+		// 完整扫描
 		if scanType == "full" {
 			envOutput, _ := a.runSudoCommand("docker", "inspect", "--format", "{{range .Config.Env}}{{.}}\n{{end}}", containerID)
 			envLines := strings.Split(envOutput, "\n")
@@ -1777,10 +1842,11 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 			}
 		}
 
+		// 确定风险等级
 		if status != "running" {
 			process.RiskLevel = "已停止"
 			process.RiskScore = 0
-			process.SecurityScore = 0
+			process.SecurityScore = 0 // 修复1.1: 已停止容器安全评分为0
 		} else if score >= 60 {
 			process.RiskLevel = "严重"
 			process.RiskScore = score
@@ -1788,18 +1854,19 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 		} else if score >= 40 {
 			process.RiskLevel = "高危"
 			process.RiskScore = score
-			process.SecurityScore = score
+			process.SecurityScore = score // 修复1.1: 补全 SecurityScore 赋值
 		} else if score >= 20 {
 			process.RiskLevel = "中危"
 			process.RiskScore = score
-			process.SecurityScore = score
+			process.SecurityScore = score // 修复1.1: 补全 SecurityScore 赋值
 		} else {
 			process.RiskLevel = "安全"
 			process.RiskScore = score
-			process.SecurityScore = score
+			process.SecurityScore = score // 修复1.1: 补全 SecurityScore 赋值
 		}
 		process.RiskFlags = flags
 
+		// 生成innerInfo
 		var info strings.Builder
 		info.WriteString(fmt.Sprintf("容器: %s (ID: %s)\n", name, containerID))
 		info.WriteString(fmt.Sprintf("镜像: %s\n", image))
@@ -1823,6 +1890,8 @@ func (a *App) ScanContainers(scanType string) ContainerScanResult {
 	return result
 }
 
+// ==================== 容器加固 ====================
+
 type HardenContainer struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
@@ -1837,6 +1906,7 @@ func (a *App) GetHardenContainers() []HardenContainer {
 		return containers
 	}
 
+	// 统一使用sudo
 	output, err := a.runSudoCommand("docker", "ps", "-a", "--format", "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}")
 	if err != nil {
 		return containers
@@ -1849,6 +1919,7 @@ func (a *App) GetHardenContainers() []HardenContainer {
 		if line == "" {
 			continue
 		}
+		// 过滤非容器行(sudo提示等污染)
 		if !isContainerIDLine(line) {
 			continue
 		}
@@ -1906,6 +1977,7 @@ func (a *App) DoHarden(req HardenRequest) HardenResponse {
 			ContainerName: task.ContainerName,
 		}
 
+		// 获取容器原始配置
 		config, err := a.getContainerOriginalConfig(task.ContainerID)
 		if err != nil {
 			result.Success = false
@@ -1914,6 +1986,7 @@ func (a *App) DoHarden(req HardenRequest) HardenResponse {
 			continue
 		}
 
+		// 分离动态和重启加固选项
 		var dynamicOpts []string
 		var restartOpts []string
 		for _, opt := range task.Options {
@@ -1925,6 +1998,7 @@ func (a *App) DoHarden(req HardenRequest) HardenResponse {
 			}
 		}
 
+		// 执行动态加固
 		for _, opt := range dynamicOpts {
 			switch opt {
 			case "network_isolate":
@@ -1935,10 +2009,14 @@ func (a *App) DoHarden(req HardenRequest) HardenResponse {
 					result.Message += "网络隔离成功; "
 				}
 			case "cgroups_limit":
+				// 【修复3.4】资源限制不再硬编码 512m/0.5cpu
+				// 策略：若原容器已有限制，按原值的 50% 缩放(限制更严格)
+				//       若原容器无限制，使用保守默认值 512m/0.5cpu
 				memLimit := "512m"
 				cpuLimit := "0.5"
 
 				if config.Memory > 0 {
+					// 按原值 50% 缩放，最小 128m
 					halfMem := config.Memory / 2
 					if halfMem < 128*1024*1024 {
 						halfMem = 128 * 1024 * 1024
@@ -1947,12 +2025,14 @@ func (a *App) DoHarden(req HardenRequest) HardenResponse {
 				}
 
 				if config.NanoCpus > 0 {
+					// NanoCpus: 1 CPU = 1e9，按原值 50% 缩放，最小 0.1 CPU
 					halfCpu := config.NanoCpus / 2
 					if halfCpu < 100000000 {
 						halfCpu = 100000000
 					}
 					cpuLimit = fmt.Sprintf("%.1f", float64(halfCpu)/1e9)
 				} else if config.CpuQuota > 0 && config.CpuPeriod > 0 {
+					// CpuQuota/CpuPeriod: CPU数 = quota/period，按 50% 缩放
 					originalCpus := float64(config.CpuQuota) / float64(config.CpuPeriod)
 					halfCpus := originalCpus / 2
 					if halfCpus < 0.1 {
@@ -1977,6 +2057,7 @@ func (a *App) DoHarden(req HardenRequest) HardenResponse {
 			}
 		}
 
+		// 执行重启加固
 		if len(restartOpts) > 0 {
 			msg, err := a.restartWithHarden(task.ContainerID, config, restartOpts)
 			if err != nil {
@@ -2014,16 +2095,19 @@ type ContainerOriginalConfig struct {
 	User           string   `json:"user"`
 	SecurityOpt    []string `json:"security_opt"`
 	ReadonlyRootfs bool     `json:"readonly_rootfs"`
-	Memory         int64    `json:"memory"`
-	CpuQuota       int64    `json:"cpu_quota"`
-	CpuPeriod      int64    `json:"cpu_period"`
-	CpuShares      int64    `json:"cpu_shares"`
-	NanoCpus       int64    `json:"nano_cpus"`
+	// 【修复3.4】记录原容器的资源限制，供动态加固时按比例缩放
+	Memory      int64   `json:"memory"`      // 字节
+	CpuQuota    int64   `json:"cpu_quota"`   // 微秒
+	CpuPeriod   int64   `json:"cpu_period"`  // 微秒
+	CpuShares   int64   `json:"cpu_shares"`
+	NanoCpus    int64   `json:"nano_cpus"`   // 纳秒级CPU配额
 }
 
 func (a *App) getContainerOriginalConfig(containerID string) (ContainerOriginalConfig, error) {
 	var config ContainerOriginalConfig
 
+	// 【修复2.1】将14次docker inspect合并为1次，一次性获取完整JSON后解析
+	// 【修复1.3】所有 json.Unmarshal 都检查错误，避免静默忽略解析失败
 	inspectJSON, err := a.runSudoCommand("docker", "inspect", "--format", "{{json .}}", containerID)
 	if err != nil {
 		return config, err
@@ -2034,12 +2118,14 @@ func (a *App) getContainerOriginalConfig(containerID string) (ContainerOriginalC
 		return config, fmt.Errorf("解析容器JSON失败: %v", err)
 	}
 
+	// 辅助函数：安全获取字符串
 	getStr := func(m map[string]interface{}, key string) string {
 		if v, ok := m[key].(string); ok {
 			return v
 		}
 		return ""
 	}
+	// 辅助函数：将 []interface{} 转为 []string
 	toStringSlice := func(arr []interface{}) []string {
 		var result []string
 		for _, v := range arr {
@@ -2049,6 +2135,7 @@ func (a *App) getContainerOriginalConfig(containerID string) (ContainerOriginalC
 		}
 		return result
 	}
+	// 【修复3.4】辅助函数：安全获取数字(JSON 中数字可能是 float64 或 json.Number)
 	getNum := func(m map[string]interface{}, key string) int64 {
 		if v, ok := m[key]; ok {
 			switch n := v.(type) {
@@ -2063,11 +2150,13 @@ func (a *App) getContainerOriginalConfig(containerID string) (ContainerOriginalC
 					return i
 				}
 			case string:
+				// "<no value>" 等非数字字符串返回 0
 			}
 		}
 		return 0
 	}
 
+	// Config 子对象
 	configObj, _ := inspectData["Config"].(map[string]interface{})
 	if configObj != nil {
 		config.Image = strings.TrimSpace(getStr(configObj, "Image"))
@@ -2079,40 +2168,49 @@ func (a *App) getContainerOriginalConfig(containerID string) (ContainerOriginalC
 		if config.WorkingDir == "<no value>" {
 			config.WorkingDir = ""
 		}
+		// Cmd
 		if cmdArr, ok := configObj["Cmd"].([]interface{}); ok {
 			config.Cmd = toStringSlice(cmdArr)
 		}
+		// Env
 		if envArr, ok := configObj["Env"].([]interface{}); ok {
 			config.Env = toStringSlice(envArr)
 		}
 	}
 
+	// HostConfig 子对象
 	hostConfig, _ := inspectData["HostConfig"].(map[string]interface{})
 	if hostConfig != nil {
 		config.Privileged = getStr(hostConfig, "Privileged") == "true"
 		config.ReadonlyRootfs = getStr(hostConfig, "ReadonlyRootfs") == "true"
 
+		// 【修复3.4】记录原容器资源限制，供动态加固按比例缩放
 		config.Memory = getNum(hostConfig, "Memory")
 		config.CpuQuota = getNum(hostConfig, "CpuQuota")
 		config.CpuPeriod = getNum(hostConfig, "CpuPeriod")
 		config.CpuShares = getNum(hostConfig, "CpuShares")
 		config.NanoCpus = getNum(hostConfig, "NanoCpus")
 
+		// CapAdd
 		if capAddArr, ok := hostConfig["CapAdd"].([]interface{}); ok {
 			config.CapAdd = toStringSlice(capAddArr)
 		}
+		// CapDrop
 		if capDropArr, ok := hostConfig["CapDrop"].([]interface{}); ok {
 			config.CapDrop = toStringSlice(capDropArr)
 		}
+		// SecurityOpt
 		if secOptArr, ok := hostConfig["SecurityOpt"].([]interface{}); ok {
 			config.SecurityOpt = toStringSlice(secOptArr)
 		}
+		// RestartPolicy
 		if rpObj, ok := hostConfig["RestartPolicy"].(map[string]interface{}); ok {
 			config.RestartPolicy = strings.TrimSpace(getStr(rpObj, "Name"))
 			if config.RestartPolicy == "<no value>" {
 				config.RestartPolicy = ""
 			}
 		}
+		// PortBindings
 		if portBindings, ok := hostConfig["PortBindings"].(map[string]interface{}); ok {
 			for portKey, bindings := range portBindings {
 				if bindingsList, ok := bindings.([]interface{}); ok {
@@ -2134,6 +2232,7 @@ func (a *App) getContainerOriginalConfig(containerID string) (ContainerOriginalC
 		}
 	}
 
+	// Mounts
 	if mountsArr, ok := inspectData["Mounts"].([]interface{}); ok {
 		for _, m := range mountsArr {
 			if mObj, ok := m.(map[string]interface{}); ok {
@@ -2146,6 +2245,7 @@ func (a *App) getContainerOriginalConfig(containerID string) (ContainerOriginalC
 		}
 	}
 
+	// Networks
 	if netSettings, ok := inspectData["NetworkSettings"].(map[string]interface{}); ok {
 		if networks, ok := netSettings["Networks"].(map[string]interface{}); ok {
 			for netName := range networks {
@@ -2157,16 +2257,18 @@ func (a *App) getContainerOriginalConfig(containerID string) (ContainerOriginalC
 	return config, nil
 }
 
+// 【修复4.2】加固选项描述表: 统一管理两处 switch case 的映射关系
 var hardenOptMessages = map[string]string{
-	"drop_privileged":   "已移除特权模式",
-	"drop_capabilities": "已丢弃所有Capabilities",
-	"non_root_user":     "已切换为非root用户(UID:1000)",
-	"seccomp":           "已启用seccomp系统调用过滤",
-	"apparmor":          "已启用AppArmor文件访问控制",
-	"read_only_rootfs":  "已启用只读根文件系统",
-	"no_new_privileges": "已禁止提权(no-new-privileges)",
+	"drop_privileged":    "已移除特权模式",
+	"drop_capabilities":  "已丢弃所有Capabilities",
+	"non_root_user":      "已切换为非root用户(UID:1000)",
+	"seccomp":            "已启用seccomp系统调用过滤",
+	"apparmor":           "已启用AppArmor文件访问控制",
+	"read_only_rootfs":   "已启用只读根文件系统",
+	"no_new_privileges":  "已禁止提权(no-new-privileges)",
 }
 
+// 【修复4.2】简单加固选项的 security-opt 参数表(无需特殊处理的选项)
 var hardenOptSecurityArgs = map[string]string{
 	"apparmor":          "apparmor=docker-default",
 	"no_new_privileges": "no-new-privileges:true",
@@ -2175,54 +2277,68 @@ var hardenOptSecurityArgs = map[string]string{
 func (a *App) restartWithHarden(containerID string, config ContainerOriginalConfig, optIDs []string) (string, error) {
 	var msg strings.Builder
 
+	// 停止容器
 	_, err := a.runSudoCommand("docker", "stop", containerID)
 	if err != nil {
 		return "", fmt.Errorf("停止容器失败: %v", err)
 	}
 
+	// 获取容器名称用于新容器
 	nameOutput, _ := a.runSudoCommand("docker", "inspect", "--format", "{{.Name}}", containerID)
 	containerName := strings.TrimPrefix(strings.TrimSpace(nameOutput), "/")
 
+	// 构建新容器参数
 	var args []string
 	args = append(args, "run", "-d")
 
+	// 名称
 	if containerName != "" {
 		args = append(args, "--name", containerName+"_hardened")
 	}
 
+	// 环境变量
 	for _, env := range config.Env {
 		args = append(args, "-e", env)
 	}
 
+	// 挂载
 	for _, vol := range config.Volumes {
 		args = append(args, "-v", vol)
 	}
 
+	// 端口
 	for _, port := range config.Ports {
 		args = append(args, "-p", port)
 	}
 
+	// 工作目录
 	if config.WorkingDir != "" {
 		args = append(args, "-w", config.WorkingDir)
 	}
 
+	// 重启策略
 	if config.RestartPolicy != "" && config.RestartPolicy != "no" {
 		args = append(args, "--restart", config.RestartPolicy)
 	}
 
+	// 网络
 	for _, net := range config.Networks {
 		args = append(args, "--network", net)
 	}
 
+	// 【修复1.2】保留原容器配置: 对未选中的加固项保留原配置值
+	// 记录哪些加固选项已启用
 	hardenOpts := map[string]bool{}
 	for _, optID := range optIDs {
 		hardenOpts[optID] = true
 	}
 
+	// 如果未启用 drop_privileged，且原容器是特权模式，保留原配置
 	if !hardenOpts["drop_privileged"] && config.Privileged {
 		args = append(args, "--privileged")
 	}
 
+	// 如果未启用 drop_capabilities，保留原 CapAdd/CapDrop
 	if !hardenOpts["drop_capabilities"] {
 		for _, cap := range config.CapAdd {
 			args = append(args, "--cap-add", cap)
@@ -2234,6 +2350,7 @@ func (a *App) restartWithHarden(containerID string, config ContainerOriginalConf
 		args = append(args, "--cap-drop=ALL")
 	}
 
+	// 如果未启用 non_root_user，保留原用户配置
 	if !hardenOpts["non_root_user"] {
 		if config.User != "" && config.User != "root" {
 			args = append(args, "--user", config.User)
@@ -2242,6 +2359,7 @@ func (a *App) restartWithHarden(containerID string, config ContainerOriginalConf
 		args = append(args, "--user", "1000:1000")
 	}
 
+	// 如果未启用 read_only_rootfs，保留原只读配置
 	if !hardenOpts["read_only_rootfs"] {
 		if config.ReadonlyRootfs {
 			args = append(args, "--read-only")
@@ -2250,20 +2368,27 @@ func (a *App) restartWithHarden(containerID string, config ContainerOriginalConf
 		args = append(args, "--read-only")
 	}
 
+	// 如果未启用 no_new_privileges，保留原 SecurityOpt
 	if !hardenOpts["no_new_privileges"] && !hardenOpts["seccomp"] && !hardenOpts["apparmor"] {
+		// 保留原有 SecurityOpt
 		for _, opt := range config.SecurityOpt {
 			args = append(args, "--security-opt", opt)
 		}
 	}
 
-	var seccompFile string
+	// 应用加固选项 (仅处理需要特殊处理的选项)
+	var seccompFile string // 用于defer清理
 	for _, optID := range optIDs {
+		// 【修复4.2】使用表驱动替代平行 switch case
 		if optID == "seccomp" {
+			// seccomp 需要特殊处理: 创建临时文件
+			// 【修复3.3】使用 os.CreateTemp 生成唯一文件，避免 TOCTOU/符号链接攻击
 			tmpFile, err := os.CreateTemp("", "wdd-seccomp-*.json")
 			if err != nil {
 				return "", fmt.Errorf("创建seccomp临时文件失败: %v", err)
 			}
 			seccompFile = tmpFile.Name()
+			// 【修复2.3】检查 os.WriteFile 失败
 			if err := os.WriteFile(seccompFile, []byte(defaultSeccompProfile()), 0644); err != nil {
 				os.Remove(seccompFile)
 				return "", fmt.Errorf("写入seccomp配置失败: %v", err)
@@ -2272,22 +2397,29 @@ func (a *App) restartWithHarden(containerID string, config ContainerOriginalConf
 			args = append(args, "--security-opt", fmt.Sprintf("seccomp=%s", seccompFile))
 			continue
 		}
+		// 其他简单选项从表查询
 		if secArg, ok := hardenOptSecurityArgs[optID]; ok {
 			args = append(args, "--security-opt", secArg)
 		}
+		// drop_privileged, drop_capabilities, non_root_user, read_only_rootfs 已在上方处理
 	}
+	// 【修复3.3】确保临时文件被清理
 	if seccompFile != "" {
 		defer os.Remove(seccompFile)
 	}
 
+	// 【修复2.4】添加 -- 分隔符，防止镜像名/参数被解释为 docker 选项
 	args = append(args, "--")
+	// 镜像和命令
 	args = append(args, config.Image)
 	if len(config.Cmd) > 0 {
 		args = append(args, config.Cmd...)
 	}
 
+	// 启动新容器
 	newIDOutput, err := a.runSudoCommand("docker", args...)
 	if err != nil {
+		// 启动失败，尝试恢复旧容器
 		_, restoreErr := a.runSudoCommand("docker", "start", containerID)
 		if restoreErr != nil {
 			return "", fmt.Errorf("启动新容器失败且无法恢复旧容器: %v / %v", err, restoreErr)
@@ -2297,11 +2429,13 @@ func (a *App) restartWithHarden(containerID string, config ContainerOriginalConf
 
 	newID := strings.TrimSpace(newIDOutput)
 
+	// 【修复2.2】docker rm/rename 错误处理，不再用 _, _ 吞掉错误
 	_, rmErr := a.runSudoCommand("docker", "rm", containerID)
 	if rmErr != nil {
 		msg.WriteString(fmt.Sprintf("警告: 删除旧容器失败(%v)，新容器已创建但旧容器残留\n", rmErr))
 	}
 
+	// 重命名新容器
 	if containerName != "" {
 		_, renameErr := a.runSudoCommand("docker", "rename", newID, containerName)
 		if renameErr != nil {
@@ -2311,6 +2445,7 @@ func (a *App) restartWithHarden(containerID string, config ContainerOriginalConf
 
 	msg.WriteString(fmt.Sprintf("容器已重启加固，新ID: %s\n", newID))
 	msg.WriteString("应用的加固措施:\n")
+	// 【修复4.2】表驱动: 消除两处平行 switch case，用统一映射表
 	for _, opt := range optIDs {
 		if desc, ok := hardenOptMessages[opt]; ok {
 			msg.WriteString("  - " + desc + "\n")
@@ -2320,28 +2455,39 @@ func (a *App) restartWithHarden(containerID string, config ContainerOriginalConf
 	return msg.String(), nil
 }
 
+// 【修复4.3】defaultSeccompProfile 从嵌入的 seccomp-default.json 读取
+// 提供 getter 函数，方便后续扩展(如运行时替换 profile)
 func defaultSeccompProfile() string {
 	return string(seccompProfileData)
 }
 
+// ==================== 工具检查 ====================
+
 type ToolStatus struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Installed   bool   `json:"installed"`
-	Version     string `json:"version"`
-	InstallCmd  string `json:"installCmd"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Installed   bool     `json:"installed"`
+	Version     string   `json:"version"`
+	InstallCmd  string   `json:"installCmd"` // 兼容前端，仍保留显示用字符串
 }
 
+// 【修复2.12】工具安装命令改为结构化定义，避免 bash -c 造成的 shell 注入风险
 type toolInstallSpec struct {
 	name        string
 	description string
-	installCmd  string
-	checkBin    string
+	installCmd  string // 仅用于前端展示
+	// checkCmds: 检测是否已安装的命令(第一个是可执行文件名)
+	checkBin string
+	// installArgs: 直接传给 exec.Command 的参数(不走 shell)
 	installArgs []string
-	useSudo     bool
-	pipeScript  string
+	// useSudo: 是否通过 app.runSudoCommand 执行(apt-get 类需要 root)
+	useSudo bool
+	// pipeScript: 若安装命令必须用管道(如 docker get.docker.com)，则用此字段
+	// 此为受控的固定字符串，不包含用户输入，安全
+	pipeScript string
 }
 
+// toolSpecs 工具安装规格表(表驱动，便于维护)
 var toolSpecs = []toolInstallSpec{
 	{
 		name:        "nmap",
@@ -2372,7 +2518,8 @@ var toolSpecs = []toolInstallSpec{
 		description: "容器运行时环境",
 		installCmd:  "curl -fsSL https://get.docker.com | sh",
 		checkBin:    "docker",
-		pipeScript:  "curl -fsSL https://get.docker.com | sh",
+		// docker 安装脚本必须用管道，但脚本地址固定、不含用户输入，安全可控
+		pipeScript: "curl -fsSL https://get.docker.com | sh",
 	},
 	{
 		name:        "dig",
@@ -2401,6 +2548,7 @@ func (a *App) CheckTools() []ToolStatus {
 			InstallCmd:  spec.installCmd,
 		}
 
+		// 检查是否已安装
 		installed := false
 		versionStr := ""
 		if spec.checkBin != "" {
@@ -2418,6 +2566,7 @@ func (a *App) CheckTools() []ToolStatus {
 			}
 		}
 
+		// 特殊检查: dig -> dnsutils
 		if !installed && spec.name == "dig" {
 			cmd := exec.Command("dpkg", "-l", "dnsutils")
 			output, err := cmd.CombinedOutput()
@@ -2426,6 +2575,7 @@ func (a *App) CheckTools() []ToolStatus {
 				tool.Version = "dnsutils已安装"
 			}
 		}
+		// 特殊检查: docker
 		if !installed && spec.name == "docker" {
 			cmd := exec.Command("docker", "--version")
 			output, err := cmd.CombinedOutput()
@@ -2457,6 +2607,8 @@ func (a *App) InstallTool(name string) string {
 		}
 	}
 
+	// 【修复2.12】不使用 bash -c 执行安装命令，改为结构化参数直接调用 exec
+	// 避免用户可控的 name 参数通过 shell 元字符注入
 	var spec *toolInstallSpec
 	for i := range toolSpecs {
 		if toolSpecs[i].name == name {
@@ -2469,6 +2621,7 @@ func (a *App) InstallTool(name string) string {
 	}
 
 	if spec.useSudo && len(spec.installArgs) > 0 {
+		// 通过 app 的 sudo 机制执行 apt-get(需要 root 权限)
 		output, err := a.runSudoCommand(spec.installArgs[0], spec.installArgs[1:]...)
 		if err != nil {
 			return fmt.Sprintf("安装失败: %v\n%s", err, output)
@@ -2477,6 +2630,8 @@ func (a *App) InstallTool(name string) string {
 	}
 
 	if spec.pipeScript != "" {
+		// docker 安装脚本: 使用固定的 curl|sh 管道
+		// 脚本地址固定，不含用户输入，安全可控
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, "bash", "-c", spec.pipeScript)
@@ -2493,6 +2648,8 @@ func (a *App) InstallTool(name string) string {
 
 	return fmt.Sprintf("未找到工具: %s", name)
 }
+
+// ==================== 通用命令执行 ====================
 
 func (a *App) runCommand(name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -2523,6 +2680,8 @@ func (a *App) runCommand(name string, args ...string) (string, error) {
 	return output, err
 }
 
+// ==================== main ====================
+
 func main() {
 	app := NewApp()
 
@@ -2530,11 +2689,6 @@ func main() {
 		Title:  "W-DD 看守者-防线部署",
 		Width:  1200,
 		Height: 800,
-
-		// ========== 全屏配置 ==========
-		WindowStartState: options.Fullscreen,
-		// ==============================
-
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -2546,7 +2700,7 @@ func main() {
 	})
 
 	if err != nil {
+		// 【修复4.4】使用 log.Fatal 替代 println，输出到 stderr 并以非零状态码退出
 		log.Fatalf("W-DD 看守者启动失败: %v", err)
 	}
 }
-// 2026-7-26留言：整体确认，无需修改
